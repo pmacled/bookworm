@@ -81,14 +81,89 @@ fold_events <- function(events, ruleset = NULL) {
   state
 }
 
+.clear_base_of <- function(bases, runner_id) {
+  for (b in c("first","second","third"))
+    if (!is.na(bases[[b]]) && bases[[b]] == runner_id) bases[[b]] <- NA_character_
+  bases
+}
+.base_slot <- function(n) c("1"="first","2"="second","3"="third")[as.character(n)]
+
 apply_plate_appearance <- function(state, evt) {
   p <- evt$payload
-  state$outs <- state$outs + as.integer(p$outs_on_play %||% 0L)
-  # advance the batting order and reset the count for the next batter
   team <- state$batting_team
+  bases <- state$bases
+  runs <- 0L
+
+  # Apply each advance: remove runner from old base, place at new base or score/out.
+  for (a in (p$advances %||% list())) {
+    bases <- .clear_base_of(bases, a$runner_id)
+    if (isTRUE(a$scored)) {
+      runs <- runs + 1L
+    } else if (!isTRUE(a$out) && a$to %in% c(1L,2L,3L)) {
+      bases[[.base_slot(a$to)]] <- a$runner_id
+    }
+  }
+  # Batter's own landing spot if not covered by an advance and not out.
+  reached <- p$reached
+  if (!is.na(reached) && reached %in% c(1L,2L,3L)) {
+    already <- any(vapply(p$advances %||% list(),
+      function(a) identical(a$runner_id, p$batter_id), logical(1)))
+    if (!already) bases[[.base_slot(reached)]] <- p$batter_id
+  }
+  if (!is.na(reached) && reached == 4L) {
+    already <- any(vapply(p$advances %||% list(),
+      function(a) identical(a$runner_id, p$batter_id) && isTRUE(a$scored), logical(1)))
+    if (!already) runs <- runs + 1L
+  }
+
+  state$bases <- bases
+  state$score[[team]] <- state$score[[team]] + runs
+  state$runs_this_half <- state$runs_this_half + runs
+  state$outs <- state$outs + as.integer(p$outs_on_play %||% 0L)
+
+  state$pa_log <- c(state$pa_log, list(list(
+    inning = state$inning, half = state$half, team = team,
+    batter_id = p$batter_id, outcome = p$outcome, fielding = p$fielding %||% NA_character_,
+    rbi = as.integer(p$rbi %||% 0L), outs_on_play = as.integer(p$outs_on_play %||% 0L),
+    reached = reached,
+    bases_after = list(first = bases$first, second = bases$second, third = bases$third)
+  )))
+
   state$batting_index[[team]] <- state$batting_index[[team]] + 1L
   state <- reset_count(state)
   if (state$outs >= 3L) state <- advance_half(state) else state <- .set_current_batter(state)
   state
 }
+
+suggest_advances <- function(state, outcome) {
+  b <- state$bases
+  occ <- c(first = !is.na(b$first), second = !is.na(b$second), third = !is.na(b$third))
+  adv <- list()
+  push <- function(id, from, to, scored = FALSE)
+    adv[[length(adv) + 1]] <<- make_advance(id, from, to, scored = scored)
+
+  bump <- switch(outcome, "1B" = 1L, "2B" = 2L, "3B" = 3L, "HR" = 4L,
+                 "BB" = 1L, "IBB" = 1L, "HBP" = 1L, 0L)
+  if (bump == 0L) return(adv)  # outs: no automatic advance suggestion
+
+  is_walk <- outcome %in% c("BB","IBB","HBP")
+  # Runners advance by `bump` bases on hits; on walks only forced runners move.
+  if (occ["third"]) {
+    to <- if (is_walk) (if (occ["second"] && occ["first"]) 4L else 3L) else min(4L, 3L + bump)
+    push(b$third, 3L, to, scored = to >= 4L)
+  }
+  if (occ["second"]) {
+    to <- if (is_walk) (if (occ["first"]) 3L else 2L) else min(4L, 2L + bump)
+    push(b$second, 2L, to, scored = to >= 4L)
+  }
+  if (occ["first"]) {
+    to <- min(4L, 1L + bump)
+    push(b$first, 1L, to, scored = to >= 4L)
+  }
+  # The batter's own advance (to `bump` bases), used to pre-fill the UI.
+  if (!is.null(state$current_batter))
+    push(state$current_batter$player_id, 0L, bump, scored = bump >= 4L)
+  adv
+}
+
 apply_substitution <- function(state, evt) state  # replaced in Task 7
