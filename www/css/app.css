@@ -1,0 +1,4 @@
+:root { --tap: 3rem; }
+.bw-outcome-btn { min-height: var(--tap); font-size: 1.1rem; font-weight: 600; }
+.bw-scorebook { overflow-x: auto; }
+@media (max-width: 576px) { .bw-outcome-grid { gap: .4rem; } }
