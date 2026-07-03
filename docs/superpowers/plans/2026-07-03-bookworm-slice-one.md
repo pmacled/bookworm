@@ -764,7 +764,8 @@ apply_plate_appearance <- function(state, evt) {
     }
   }
   # Batter's own landing spot if not covered by an advance and not out.
-  reached <- p$reached
+  # %||% guards NULL (e.g. from a JSON round trip where NA_integer_ serialized to null).
+  reached <- p$reached %||% NA_integer_
   if (!is.na(reached) && reached %in% c(1L,2L,3L)) {
     already <- any(vapply(p$advances %||% list(),
       function(a) identical(a$runner_id, p$batter_id), logical(1)))
@@ -1291,7 +1292,9 @@ git commit -m "feat: JSON export/import with fold round-trip guarantee"
 
 ```r
 library(testthat)
-for (f in c("app_config.R","rules_engine.R","game_events.R","game_reducer.R","scorebook_render.R"))
+# brand_colors.R must be sourced (scorebook_render.R uses BRAND_COLORS); it reads _brand.yml
+# relative to the project root, so run this test from the project root.
+for (f in c("app_config.R","brand_colors.R","rules_engine.R","game_events.R","game_reducer.R","scorebook_render.R"))
   source(file.path("R", f))
 
 test_that("cell svg contains a diamond polygon and the outcome text", {
