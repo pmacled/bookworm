@@ -190,4 +190,32 @@ suggest_advances <- function(state, outcome) {
   adv
 }
 
-apply_substitution <- function(state, evt) state  # replaced in Task 7
+apply_substitution <- function(state, evt) {
+  p <- evt$payload
+  team <- p$team
+  if (p$kind == "batting") {
+    lineup <- state$lineups[[team]]
+    for (i in seq_along(lineup)) {
+      if (identical(lineup[[i]]$order_slot, as.integer(p$order_slot))) {
+        inp <- p$in_player; inp$order_slot <- as.integer(p$order_slot)
+        lineup[[i]] <- inp
+      }
+    }
+    state$lineups[[team]] <- lineup
+    state <- .set_current_batter(state)
+  } else if (p$kind == "defensive") {
+    lineup <- state$lineups[[team]]
+    for (i in seq_along(lineup)) {
+      if (identical(lineup[[i]]$player_id, p$out_player_id)) {
+        inp <- p$in_player; inp$position <- if (is.null(p$position)) NA_integer_ else as.integer(p$position)
+        lineup[[i]] <- inp
+      }
+    }
+    state$lineups[[team]] <- lineup
+  } else if (p$kind == "courtesy_runner") {
+    for (b in c("first","second","third"))
+      if (!is.na(state$bases[[b]]) && state$bases[[b]] == p$out_player_id)
+        state$bases[[b]] <- p$in_player$player_id
+  }
+  state
+}
