@@ -90,7 +90,7 @@ game_should_end <- function(cfg, state) {
   m <- cfg$mercy_rule
   if (!is.na(m$differential)) {
     diff <- abs(state$score$home - state$score$away)
-    after <- m$after_inning %||% 1L
+    after <- if (is.na(m$after_inning)) 1L else m$after_inning  # %||% won't catch NA
     if (state$inning >= after && diff >= m$differential) return(TRUE)
   }
   # Regulation complete: finished the bottom of the final inning.

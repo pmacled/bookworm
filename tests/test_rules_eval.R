@@ -38,3 +38,10 @@ test_that("reducer surfaces a gender-order warning for the batter due up", {
   s <- fold_events(list(start, pa1))   # m2 (M) now due up after m1 (M)
   expect_true(any(grepl("gender", s$warnings, ignore.case = TRUE)))
 })
+
+test_that("mercy with differential but no after_inning does not crash and can end", {
+  cfg <- coerce_ruleset_config(list(mercy_rule = list(differential = 10L)))  # after_inning stays NA
+  st <- list(inning = 3L, half = "top", score = list(home = 15L, away = 3L),
+             ruleset = cfg, outs = 0L)
+  expect_true(game_should_end(cfg, st))   # must not error
+})
