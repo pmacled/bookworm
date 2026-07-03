@@ -882,6 +882,18 @@ test_that("mercy ends the game", {
              ruleset = cfg, outs = 0L)
   expect_true(game_should_end(cfg, st))
 })
+
+test_that("reducer surfaces a gender-order warning for the batter due up", {
+  cfg <- coerce_ruleset_config(list(batting_gender_rule = list(type = "no_two_males_consecutive")))
+  lineup <- list(make_player("m1","M1","M",1L,1L,6L), make_player("m2","M2","M",2L,2L,4L))
+  start <- new_event("game_start", list(ruleset = cfg, first_bat = "away",
+    home = list(team_id="H", name="Home", lineup = lineup),
+    away = list(team_id="A", name="Away", lineup = lineup)), seq = 1L)
+  pa1 <- new_event("plate_appearance", list(team="away", batter_id="m1", outcome="1B",
+    reached=1L, rbi=0L, outs_on_play=0L, advances=list()), seq = 2L)
+  s <- fold_events(list(start, pa1))   # m2 (M) now due up after m1 (M)
+  expect_true(any(grepl("gender", s$warnings, ignore.case = TRUE)))
+})
 ```
 
 - [ ] **Step 2: Run test, expect FAIL**
@@ -937,30 +949,41 @@ game_should_end <- function(cfg, state) {
 ```
 
 - [ ] **Step 4: Wire evaluators into the reducer.** In `R/game_reducer.R`:
-  - In `apply_plate_appearance`, cap runs before adding to score:
-    replace `runs <- runs + 1L` accumulation result with a capped total right before applying:
-    add, just before `state$score[[team]] <- ...`:
+  - **(a) Cap runs in `apply_plate_appearance`.** After the advances loop computes `runs` (and after the batter's own run is added), and immediately **before** `state$score[[team]] <- state$score[[team]] + runs`, insert:
     ```r
     capped <- apply_run_cap(state$ruleset, state$runs_this_half + runs, state$inning) - state$runs_this_half
     runs <- max(0L, capped)
     ```
-  - After computing the next situation in both `apply_plate_appearance` and `advance_half`, set warnings and end-state:
-    add a helper and call it at the end of `apply_event` before returning (except for `game_start`):
+  - **(b) Add the `.refresh_flags` helper** to `R/game_reducer.R`:
     ```r
     .refresh_flags <- function(state) {
       cfg <- state$ruleset
       def_team <- if (identical(state$batting_team, "away")) "home" else "away"
-      w <- character()
+      w <- fielding_warnings(cfg, state$lineups[[def_team]])
       if (!is.null(state$current_batter)) {
-        prev <- vapply(utils::head(state$pa_log, 0), function(x) x$gender %||% NA_character_, character(1))
+        bt <- state$batting_team
+        prev_genders <- vapply(
+          Filter(function(r) identical(r$team, bt), state$pa_log),
+          function(r) {
+            pl <- Filter(function(p) identical(p$player_id, r$batter_id), state$lineups[[bt]])
+            if (length(pl)) pl[[1]]$gender else NA_character_
+          }, character(1))
+        prev_genders <- prev_genders[!is.na(prev_genders)]
+        if (!next_batter_gender_ok(cfg, prev_genders, state$current_batter$gender)) {
+          w <- c(w, "Batting order: the batter due up violates the gender rule.")
+        }
       }
-      w <- c(w, fielding_warnings(cfg, state$lineups[[def_team]]))
       state$warnings <- w
       if (game_should_end(cfg, state)) state$status <- "final"
       state
     }
     ```
-    and change `fold_events`/`apply_event` so non-`game_start` events return `.refresh_flags(state)`.
+  - **(c) Route every non-`game_start` branch of `apply_event` through `.refresh_flags`.** Change those branches' returns to:
+    - `count_override`: `return(.refresh_flags(state))`
+    - `inning_end`: `return(.refresh_flags(advance_half(state)))`
+    - `plate_appearance`: `state <- apply_plate_appearance(state, evt); return(.refresh_flags(state))`
+    - `substitution`: `return(.refresh_flags(apply_substitution(state, evt)))`
+    Leave the `game_start` branch returning its state directly (no flags before the first pitch).
 
 - [ ] **Step 5: Run all reducer + rules tests, expect PASS**
 
