@@ -126,7 +126,10 @@ apply_plate_appearance <- function(state, evt) {
     }
   }
   # Batter's own landing spot if not covered by an advance and not out.
-  reached <- p$reached
+  # %||% guards against NULL, which occurs when a NA_integer_ `reached`
+  # round-trips through JSON (jsonlite emits null; simplifyVector=FALSE
+  # reads it back as NULL rather than NA_integer_).
+  reached <- p$reached %||% NA_integer_
   if (!is.na(reached) && reached %in% c(1L,2L,3L)) {
     already <- any(vapply(p$advances %||% list(),
       function(a) identical(a$runner_id, p$batter_id), logical(1)))

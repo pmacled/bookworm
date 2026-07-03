@@ -18,3 +18,13 @@ test_that("round trip preserves game outcome", {
   expect_equal(s2$score, s1$score)
   expect_equal(back$events[[2]]$seq, 2L)  # seq restored as integer
 })
+
+test_that("round trip survives an out event (reached NA becomes null then back)", {
+  evts_with_out <- c(evts, list(
+    new_event("plate_appearance", list(team = "away", batter_id = "a2", outcome = "K",
+      reached = NA_integer_, rbi = 0L, outs_on_play = 1L, advances = list()), seq = 3L)))
+  back <- game_from_json(game_to_json(evts_with_out))
+  s <- fold_events(back$events)     # must NOT error
+  expect_equal(s$outs, 1L)
+  expect_equal(s$bases$first, "a1")
+})
