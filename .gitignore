@@ -1,0 +1,13 @@
+.Rproj.user
+.Rhistory
+.Rdata
+.RData
+.httr-oauth
+.DS_Store
+.quarto
+
+# Environment variables (never commit API keys or DB credentials)
+.Renviron
+
+# R data / package artifacts
+*.rds
