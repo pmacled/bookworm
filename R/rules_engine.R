@@ -53,3 +53,47 @@ validate_ruleset_config <- function(cfg) {
 
   list(ok = length(errors) == 0, errors = errors)
 }
+
+next_batter_gender_ok <- function(cfg, prev_genders, next_gender) {
+  rule <- cfg$batting_gender_rule
+  type <- rule$type
+  if (type == "none") return(TRUE)
+  last <- if (length(prev_genders)) tail(prev_genders, 1) else NA_character_
+  if (type == "no_two_males_consecutive") return(!(identical(last, "M") && identical(next_gender, "M")))
+  if (type == "every_other") return(is.na(last) || !identical(last, next_gender))
+  if (type == "every_n") {
+    n <- cfg$batting_gender_rule$n
+    recent <- tail(c(prev_genders, next_gender), n)
+    return(any(recent == "F"))  # at least one F in every window of n
+  }
+  TRUE
+}
+
+fielding_warnings <- function(cfg, defense_lineup) {
+  warns <- character()
+  on_d <- Filter(function(p) !is.na(p$position), defense_lineup)
+  n_f <- sum(vapply(on_d, function(p) identical(p$gender, "F"), logical(1)))
+  if (n_f < (cfg$fielding$min_females %||% 0L))
+    warns <- c(warns, sprintf("Fielding requires ≥ %d female players (currently %d).",
+                              cfg$fielding$min_females, n_f))
+  warns
+}
+
+apply_run_cap <- function(cfg, runs_this_half, inning) {
+  cap <- cfg$run_cap_per_inning
+  if (is.na(cap)) return(as.integer(runs_this_half))
+  if (isTRUE(cfg$open_last_inning) && inning >= cfg$innings) return(as.integer(runs_this_half))
+  as.integer(min(runs_this_half, cap))
+}
+
+game_should_end <- function(cfg, state) {
+  m <- cfg$mercy_rule
+  if (!is.na(m$differential)) {
+    diff <- abs(state$score$home - state$score$away)
+    after <- m$after_inning %||% 1L
+    if (state$inning >= after && diff >= m$differential) return(TRUE)
+  }
+  # Regulation complete: finished the bottom of the final inning.
+  if (state$inning > cfg$innings) return(TRUE)
+  FALSE
+}

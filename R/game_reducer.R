@@ -48,6 +48,28 @@ advance_half <- function(state) {
   state
 }
 
+.refresh_flags <- function(state) {
+  cfg <- state$ruleset
+  def_team <- if (identical(state$batting_team, "away")) "home" else "away"
+  w <- fielding_warnings(cfg, state$lineups[[def_team]])
+  if (!is.null(state$current_batter)) {
+    bt <- state$batting_team
+    prev_genders <- vapply(
+      Filter(function(r) identical(r$team, bt), state$pa_log),
+      function(r) {
+        pl <- Filter(function(p) identical(p$player_id, r$batter_id), state$lineups[[bt]])
+        if (length(pl)) pl[[1]]$gender else NA_character_
+      }, character(1))
+    prev_genders <- prev_genders[!is.na(prev_genders)]
+    if (!next_batter_gender_ok(cfg, prev_genders, state$current_batter$gender)) {
+      w <- c(w, "Batting order: the batter due up violates the gender rule.")
+    }
+  }
+  state$warnings <- w
+  if (game_should_end(cfg, state)) state$status <- "final"
+  state
+}
+
 apply_event <- function(state, evt) {
   type <- evt$type
   if (type == "game_start") {
@@ -63,15 +85,15 @@ apply_event <- function(state, evt) {
   if (type == "count_override") {
     state$count <- list(balls = as.integer(evt$payload$balls),
                         strikes = as.integer(evt$payload$strikes))
-    return(state)
+    return(.refresh_flags(state))
   }
-  if (type == "inning_end") return(advance_half(state))
+  if (type == "inning_end") return(.refresh_flags(advance_half(state)))
   if (type == "plate_appearance") {
     # Full advance/scoring logic added in Task 5; core handles outs + turn here.
     state <- apply_plate_appearance(state, evt)   # defined in Task 5
-    return(state)
+    return(.refresh_flags(state))
   }
-  if (type == "substitution") return(apply_substitution(state, evt))  # Task 7
+  if (type == "substitution") return(.refresh_flags(apply_substitution(state, evt)))  # Task 7
   state
 }
 
@@ -117,6 +139,8 @@ apply_plate_appearance <- function(state, evt) {
   }
 
   state$bases <- bases
+  capped <- apply_run_cap(state$ruleset, state$runs_this_half + runs, state$inning) - state$runs_this_half
+  runs <- max(0L, capped)
   state$score[[team]] <- state$score[[team]] + runs
   state$runs_this_half <- state$runs_this_half + runs
   state$outs <- state$outs + as.integer(p$outs_on_play %||% 0L)
