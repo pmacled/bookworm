@@ -939,7 +939,7 @@ game_should_end <- function(cfg, state) {
   m <- cfg$mercy_rule
   if (!is.na(m$differential)) {
     diff <- abs(state$score$home - state$score$away)
-    after <- m$after_inning %||% 1L
+    after <- if (is.na(m$after_inning)) 1L else m$after_inning  # %||% won't catch NA
     if (state$inning >= after && diff >= m$differential) return(TRUE)
   }
   # Regulation complete: finished the bottom of the final inning.
@@ -2005,8 +2005,10 @@ record_outcome_event <- function(state, outcome, team) {
                     "BB"=1L,"IBB"=1L,"HBP"=1L,"FC"=1L,"E"=1L, NA_integer_)
   outs_on_play <- if (outcome %in% .OUT_OUTCOMES) 1L else 0L
   advances <- suggest_advances(state, outcome)
+  # suggest_advances already includes the batter's own advance (scored on a HR),
+  # so RBIs are simply the count of scored advances — do NOT add a separate
+  # reached==4 bonus or the batter's HR run would be double-counted.
   rbi <- sum(vapply(advances, function(a) isTRUE(a$scored), logical(1)))
-  if (!is.na(reached) && reached == 4L) rbi <- rbi + 1L
   new_event("plate_appearance", list(team = team,
     batter_id = state$current_batter$player_id, outcome = outcome,
     reached = reached, rbi = as.integer(rbi), outs_on_play = outs_on_play,
