@@ -1,0 +1,224 @@
+initial_game_state <- function(ruleset = default_ruleset_config()) {
+  ruleset <- coerce_ruleset_config(ruleset)
+  list(
+    status = "in_progress", inning = 1L, half = "top", outs = 0L,
+    count = list(balls = ruleset$starting_count$balls,
+                 strikes = ruleset$starting_count$strikes),
+    bases = list(first = NA_character_, second = NA_character_, third = NA_character_),
+    score = list(home = 0L, away = 0L), runs_this_half = 0L,
+    lineups = list(home = list(), away = list()),
+    batting_index = list(home = 0L, away = 0L),
+    batting_team = "away", current_batter = NULL,
+    pa_log = list(), line_score = list(home = integer(), away = integer()),
+    warnings = character(), ruleset = ruleset
+  )
+}
+
+reset_count <- function(state) {
+  state$count <- list(balls = state$ruleset$starting_count$balls,
+                      strikes = state$ruleset$starting_count$strikes)
+  state
+}
+
+.set_current_batter <- function(state) {
+  team <- state$batting_team
+  lineup <- state$lineups[[team]]
+  if (length(lineup) == 0) { state$current_batter <- NULL; return(state) }
+  batters <- Filter(function(p) !is.na(p$order_slot), lineup)
+  batters <- batters[order(vapply(batters, function(p) p$order_slot, integer(1)))]
+  idx <- (state$batting_index[[team]] %% length(batters))
+  state$current_batter <- batters[[idx + 1]]
+  state
+}
+
+advance_half <- function(state) {
+  # record runs for the completed half into the line score
+  state$line_score[[state$batting_team]] <-
+    c(state$line_score[[state$batting_team]], state$runs_this_half)
+  if (identical(state$half, "top")) {
+    state$half <- "bottom"; state$batting_team <- "home"
+  } else {
+    state$half <- "top"; state$batting_team <- "away"; state$inning <- state$inning + 1L
+  }
+  state$outs <- 0L
+  state$runs_this_half <- 0L
+  state$bases <- list(first = NA_character_, second = NA_character_, third = NA_character_)
+  state <- reset_count(state)
+  state <- .set_current_batter(state)
+  state
+}
+
+.refresh_flags <- function(state) {
+  cfg <- state$ruleset
+  def_team <- if (identical(state$batting_team, "away")) "home" else "away"
+  w <- fielding_warnings(cfg, state$lineups[[def_team]])
+  if (!is.null(state$current_batter)) {
+    bt <- state$batting_team
+    prev_genders <- vapply(
+      Filter(function(r) identical(r$team, bt), state$pa_log),
+      function(r) {
+        pl <- Filter(function(p) identical(p$player_id, r$batter_id), state$lineups[[bt]])
+        if (length(pl)) pl[[1]]$gender else NA_character_
+      }, character(1))
+    prev_genders <- prev_genders[!is.na(prev_genders)]
+    if (!next_batter_gender_ok(cfg, prev_genders, state$current_batter$gender)) {
+      w <- c(w, "Batting order: the batter due up violates the gender rule.")
+    }
+  }
+  state$warnings <- w
+  if (game_should_end(cfg, state)) state$status <- "final"
+  state
+}
+
+apply_event <- function(state, evt) {
+  type <- evt$type
+  if (type == "game_start") {
+    p <- evt$payload
+    state <- initial_game_state(p$ruleset %||% state$ruleset)
+    state$lineups$home <- p$home$lineup
+    state$lineups$away <- p$away$lineup
+    state$teams <- list(home = p$home[c("team_id","name")], away = p$away[c("team_id","name")])
+    state$batting_team <- p$first_bat %||% "away"
+    state <- .set_current_batter(state)
+    return(state)
+  }
+  if (type == "count_override") {
+    state$count <- list(balls = as.integer(evt$payload$balls),
+                        strikes = as.integer(evt$payload$strikes))
+    return(.refresh_flags(state))
+  }
+  if (type == "inning_end") return(.refresh_flags(advance_half(state)))
+  if (type == "plate_appearance") {
+    # Full advance/scoring logic added in Task 5; core handles outs + turn here.
+    state <- apply_plate_appearance(state, evt)   # defined in Task 5
+    return(.refresh_flags(state))
+  }
+  if (type == "substitution") return(.refresh_flags(apply_substitution(state, evt)))  # Task 7
+  state
+}
+
+fold_events <- function(events, ruleset = NULL) {
+  state <- initial_game_state(ruleset %||% default_ruleset_config())
+  for (evt in events) state <- apply_event(state, evt)
+  state
+}
+
+.clear_base_of <- function(bases, runner_id) {
+  for (b in c("first","second","third"))
+    if (!is.na(bases[[b]]) && bases[[b]] == runner_id) bases[[b]] <- NA_character_
+  bases
+}
+.base_slot <- function(n) c("1"="first","2"="second","3"="third")[as.character(n)]
+
+apply_plate_appearance <- function(state, evt) {
+  p <- evt$payload
+  team <- state$batting_team
+  bases <- state$bases
+  runs <- 0L
+
+  # Apply each advance: remove runner from old base, place at new base or score/out.
+  for (a in (p$advances %||% list())) {
+    bases <- .clear_base_of(bases, a$runner_id)
+    if (isTRUE(a$scored)) {
+      runs <- runs + 1L
+    } else if (!isTRUE(a$out) && a$to %in% c(1L,2L,3L)) {
+      bases[[.base_slot(a$to)]] <- a$runner_id
+    }
+  }
+  # Batter's own landing spot if not covered by an advance and not out.
+  # %||% guards against NULL, which occurs when a NA_integer_ `reached`
+  # round-trips through JSON (jsonlite emits null; simplifyVector=FALSE
+  # reads it back as NULL rather than NA_integer_).
+  reached <- p$reached %||% NA_integer_
+  if (!is.na(reached) && reached %in% c(1L,2L,3L)) {
+    already <- any(vapply(p$advances %||% list(),
+      function(a) identical(a$runner_id, p$batter_id), logical(1)))
+    if (!already) bases[[.base_slot(reached)]] <- p$batter_id
+  }
+  if (!is.na(reached) && reached == 4L) {
+    already <- any(vapply(p$advances %||% list(),
+      function(a) identical(a$runner_id, p$batter_id) && isTRUE(a$scored), logical(1)))
+    if (!already) runs <- runs + 1L
+  }
+
+  state$bases <- bases
+  capped <- apply_run_cap(state$ruleset, state$runs_this_half + runs, state$inning) - state$runs_this_half
+  runs <- max(0L, capped)
+  state$score[[team]] <- state$score[[team]] + runs
+  state$runs_this_half <- state$runs_this_half + runs
+  state$outs <- state$outs + as.integer(p$outs_on_play %||% 0L)
+
+  state$pa_log <- c(state$pa_log, list(list(
+    inning = state$inning, half = state$half, team = team,
+    batter_id = p$batter_id, outcome = p$outcome, fielding = p$fielding %||% NA_character_,
+    rbi = as.integer(p$rbi %||% 0L), outs_on_play = as.integer(p$outs_on_play %||% 0L),
+    reached = reached,
+    bases_after = list(first = bases$first, second = bases$second, third = bases$third)
+  )))
+
+  state$batting_index[[team]] <- state$batting_index[[team]] + 1L
+  state <- reset_count(state)
+  if (state$outs >= 3L) state <- advance_half(state) else state <- .set_current_batter(state)
+  state
+}
+
+suggest_advances <- function(state, outcome) {
+  b <- state$bases
+  occ <- c(first = !is.na(b$first), second = !is.na(b$second), third = !is.na(b$third))
+  adv <- list()
+  push <- function(id, from, to, scored = FALSE)
+    adv[[length(adv) + 1]] <<- make_advance(id, from, to, scored = scored)
+
+  bump <- switch(outcome, "1B" = 1L, "2B" = 2L, "3B" = 3L, "HR" = 4L,
+                 "BB" = 1L, "IBB" = 1L, "HBP" = 1L, 0L)
+  if (bump == 0L) return(adv)  # outs: no automatic advance suggestion
+
+  is_walk <- outcome %in% c("BB","IBB","HBP")
+  # Runners advance by `bump` bases on hits; on walks only forced runners move.
+  if (occ["third"]) {
+    to <- if (is_walk) (if (occ["second"] && occ["first"]) 4L else 3L) else min(4L, 3L + bump)
+    push(b$third, 3L, to, scored = to >= 4L)
+  }
+  if (occ["second"]) {
+    to <- if (is_walk) (if (occ["first"]) 3L else 2L) else min(4L, 2L + bump)
+    push(b$second, 2L, to, scored = to >= 4L)
+  }
+  if (occ["first"]) {
+    to <- min(4L, 1L + bump)
+    push(b$first, 1L, to, scored = to >= 4L)
+  }
+  # The batter's own advance (to `bump` bases), used to pre-fill the UI.
+  if (!is.null(state$current_batter))
+    push(state$current_batter$player_id, 0L, bump, scored = bump >= 4L)
+  adv
+}
+
+apply_substitution <- function(state, evt) {
+  p <- evt$payload
+  team <- p$team
+  if (p$kind == "batting") {
+    lineup <- state$lineups[[team]]
+    for (i in seq_along(lineup)) {
+      if (identical(lineup[[i]]$order_slot, as.integer(p$order_slot))) {
+        inp <- p$in_player; inp$order_slot <- as.integer(p$order_slot)
+        lineup[[i]] <- inp
+      }
+    }
+    state$lineups[[team]] <- lineup
+    state <- .set_current_batter(state)
+  } else if (p$kind == "defensive") {
+    lineup <- state$lineups[[team]]
+    for (i in seq_along(lineup)) {
+      if (identical(lineup[[i]]$player_id, p$out_player_id)) {
+        inp <- p$in_player; inp$position <- if (is.null(p$position)) NA_integer_ else as.integer(p$position)
+        lineup[[i]] <- inp
+      }
+    }
+    state$lineups[[team]] <- lineup
+  } else if (p$kind == "courtesy_runner") {
+    for (b in c("first","second","third"))
+      if (!is.na(state$bases[[b]]) && state$bases[[b]] == p$out_player_id)
+        state$bases[[b]] <- p$in_player$player_id
+  }
+  state
+}

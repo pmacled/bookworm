@@ -764,7 +764,8 @@ apply_plate_appearance <- function(state, evt) {
     }
   }
   # Batter's own landing spot if not covered by an advance and not out.
-  reached <- p$reached
+  # %||% guards NULL (e.g. from a JSON round trip where NA_integer_ serialized to null).
+  reached <- p$reached %||% NA_integer_
   if (!is.na(reached) && reached %in% c(1L,2L,3L)) {
     already <- any(vapply(p$advances %||% list(),
       function(a) identical(a$runner_id, p$batter_id), logical(1)))
@@ -939,7 +940,7 @@ game_should_end <- function(cfg, state) {
   m <- cfg$mercy_rule
   if (!is.na(m$differential)) {
     diff <- abs(state$score$home - state$score$away)
-    after <- m$after_inning %||% 1L
+    after <- if (is.na(m$after_inning)) 1L else m$after_inning  # %||% won't catch NA
     if (state$inning >= after && diff >= m$differential) return(TRUE)
   }
   # Regulation complete: finished the bottom of the final inning.
@@ -1291,7 +1292,9 @@ git commit -m "feat: JSON export/import with fold round-trip guarantee"
 
 ```r
 library(testthat)
-for (f in c("app_config.R","rules_engine.R","game_events.R","game_reducer.R","scorebook_render.R"))
+# brand_colors.R must be sourced (scorebook_render.R uses BRAND_COLORS); it reads _brand.yml
+# relative to the project root, so run this test from the project root.
+for (f in c("app_config.R","brand_colors.R","rules_engine.R","game_events.R","game_reducer.R","scorebook_render.R"))
   source(file.path("R", f))
 
 test_that("cell svg contains a diamond polygon and the outcome text", {
@@ -2005,8 +2008,10 @@ record_outcome_event <- function(state, outcome, team) {
                     "BB"=1L,"IBB"=1L,"HBP"=1L,"FC"=1L,"E"=1L, NA_integer_)
   outs_on_play <- if (outcome %in% .OUT_OUTCOMES) 1L else 0L
   advances <- suggest_advances(state, outcome)
+  # suggest_advances already includes the batter's own advance (scored on a HR),
+  # so RBIs are simply the count of scored advances — do NOT add a separate
+  # reached==4 bonus or the batter's HR run would be double-counted.
   rbi <- sum(vapply(advances, function(a) isTRUE(a$scored), logical(1)))
-  if (!is.na(reached) && reached == 4L) rbi <- rbi + 1L
   new_event("plate_appearance", list(team = team,
     batter_id = state$current_batter$player_id, outcome = outcome,
     reached = reached, rbi = as.integer(rbi), outs_on_play = outs_on_play,
@@ -2044,8 +2049,12 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
       s <- isolate(state())
       if (identical(s$status, "final")) return(invisible())
       evt <- record_outcome_event(s, outcome, s$batting_team)
-      storage$append_event(game_id, evt)
-      events(storage$load_events(game_id))
+      appended <- storage$append_event(game_id, evt)
+      # The local events() list is the in-session source of truth. Append to it
+      # directly (do NOT reload from storage) so an undo — which truncates events()
+      # — is not resurrected on the next append. (Storage rows for undone events are
+      # not pruned in slice one; that only affects a full reload/resume, per README.)
+      events(c(isolate(events()), list(appended)))
       storage$save_snapshot(game_id, isolate(state()))
     }
     outcomes <- c("1B","2B","3B","HR","BB","K","GO","FO","FC","E")
@@ -2076,7 +2085,6 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
     output$box_away <- renderTable(batting_lines(state(), "away"))
     output$box_home <- renderTable(batting_lines(state(), "home"))
 
-    if (length(state()$warnings)) NULL  # warnings surfaced via situation panel later
     state
   })
 }
