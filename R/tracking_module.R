@@ -46,8 +46,8 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
       s <- isolate(state())
       if (identical(s$status, "final")) return(invisible())
       evt <- record_outcome_event(s, outcome, s$batting_team)
-      storage$append_event(game_id, evt)
-      events(storage$load_events(game_id))
+      appended <- storage$append_event(game_id, evt)
+      events(c(isolate(events()), list(appended)))
       storage$save_snapshot(game_id, isolate(state()))
     }
     outcomes <- c("1B","2B","3B","HR","BB","K","GO","FO","FC","E")
@@ -78,7 +78,6 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
     output$box_away <- renderTable(batting_lines(state(), "away"))
     output$box_home <- renderTable(batting_lines(state(), "home"))
 
-    if (length(state()$warnings)) NULL  # warnings surfaced via situation panel later
     state
   })
 }
