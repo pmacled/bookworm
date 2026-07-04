@@ -2049,8 +2049,12 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
       s <- isolate(state())
       if (identical(s$status, "final")) return(invisible())
       evt <- record_outcome_event(s, outcome, s$batting_team)
-      storage$append_event(game_id, evt)
-      events(storage$load_events(game_id))
+      appended <- storage$append_event(game_id, evt)
+      # The local events() list is the in-session source of truth. Append to it
+      # directly (do NOT reload from storage) so an undo — which truncates events()
+      # — is not resurrected on the next append. (Storage rows for undone events are
+      # not pruned in slice one; that only affects a full reload/resume, per README.)
+      events(c(isolate(events()), list(appended)))
       storage$save_snapshot(game_id, isolate(state()))
     }
     outcomes <- c("1B","2B","3B","HR","BB","K","GO","FO","FC","E")
@@ -2081,7 +2085,6 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
     output$box_away <- renderTable(batting_lines(state(), "away"))
     output$box_home <- renderTable(batting_lines(state(), "home"))
 
-    if (length(state()$warnings)) NULL  # warnings surfaced via situation panel later
     state
   })
 }
