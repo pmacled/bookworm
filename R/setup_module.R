@@ -240,7 +240,26 @@ setup_server <- function(id) {
     show_gender_val <- reactiveVal(!ruleset_is_genderless(default_ruleset_config()))
     observe({
       new_val <- !ruleset_is_genderless(ruleset())
-      if (!identical(new_val, isolate(show_gender_val()))) show_gender_val(new_val)
+      if (!identical(new_val, isolate(show_gender_val()))) {
+        # The lineup shells (output$away_lineup / output$home_lineup, below) are about
+        # to re-render because the gender column is appearing or disappearing. That
+        # renderUI() call regenerates `.lineup_ui()` -- an *empty* `<tbody>` -- and any
+        # rows added since via insertUI() live only in the tbody that is about to be
+        # thrown away. `rows[[prefix]]()` and the row-scoped inputs (away_name_3, ...)
+        # would otherwise survive the re-render as phantoms: invisible, un-deletable,
+        # yet still read by collect_lineup() the next time it runs off the *old*
+        # row-id list, silently defaulting a stale player's gender via `%||% "M"`.
+        # Reset both row lists so no stale id is ever collected again, and tell the
+        # user their entries were cleared rather than silently keep or drop them.
+        had_rows <- length(isolate(rows$away())) > 0L || length(isolate(rows$home())) > 0L
+        show_gender_val(new_val)
+        rows$away(integer())
+        rows$home(integer())
+        if (had_rows)
+          showNotification(
+            "The ruleset change altered the lineup table's columns, so both lineups were cleared. Please re-enter the players.",
+            type = "warning", duration = 8)
+      }
     })
     show_gender <- show_gender_val
 

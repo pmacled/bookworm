@@ -89,3 +89,54 @@ test_that("an unrelated rules-panel edit does not re-render the lineup shells, b
     expect_gt(get(".lineup_render_count", envir = globalenv()), n0)
   })
 })
+
+test_that("the rendered lineup shell actually shows/hides the Gender column for each polarity", {
+  # Pins the headline requirement at the server-rendered-output level (not just via the
+  # pure .lineup_table_head()/.player_row() helpers, which take show_gender as a hand-passed
+  # argument and would stay green even if setup_server() wired the reactive backwards).
+  testServer(setup_server, {
+    session$flushReact()
+    session$setInputs(gender_rule = "none", fielding_preset = "none")
+    session$flushReact()
+    expect_false(grepl(">Gender<", output$away_lineup$html, fixed = TRUE))
+
+    session$setInputs(gender_rule = "max_consecutive_males", gender_n = 2)
+    session$flushReact()
+    expect_true(grepl(">Gender<", output$away_lineup$html, fixed = TRUE))
+  })
+})
+
+test_that("a ruleset change that flips genderless-ness clears stale rows so no phantom player reaches collect_lineup", {
+  # Before the fix: output$away_lineup re-renders `.lineup_ui()` to an *empty* <tbody>
+  # when show_gender flips, but rows$away() (and the row-scoped inputs) survived --
+  # collect_lineup() would then resurrect the vanished rows as "M"-defaulted phantom
+  # players: invisible in the UI, un-deletable, yet still saved and still sent to
+  # game_start. This pins that the row list -- not just the on-screen table -- is
+  # actually cleared.
+  testServer(setup_server, {
+    session$flushReact()
+    session$setInputs(gender_rule = "none", fielding_preset = "none")   # genderless
+    session$flushReact()
+    expect_false(isolate(show_gender()))
+
+    session$setInputs(away_add = 1); session$flushReact()
+    session$setInputs(away_add = 1); session$flushReact()
+    session$setInputs(away_add = 1); session$flushReact()
+    session$setInputs(
+      away_name_1 = "A", away_jersey_1 = 1, away_pos_1 = "P",
+      away_name_2 = "B", away_jersey_2 = 2, away_pos_2 = "C",
+      away_name_3 = "C", away_jersey_3 = 3, away_pos_3 = "SS"
+    )
+    session$flushReact()
+    expect_equal(length(isolate(rows$away())), 3L)
+
+    # Flip to a gendered ruleset -- the historical bug scenario.
+    session$setInputs(gender_rule = "max_consecutive_males", gender_n = 2)
+    session$flushReact()
+    expect_true(isolate(show_gender()))
+
+    expect_equal(length(isolate(rows$away())), 0L)
+    lu <- collect_lineup(input, "away", isolate(rows$away()), show_gender = isolate(show_gender()))
+    expect_equal(length(lu), 0L)
+  })
+})
