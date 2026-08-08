@@ -19,7 +19,7 @@ record_half_runs_event <- function(state, runs) {
 }
 
 record_outcome_event <- function(state, outcome, team) {
-  reached <- switch(outcome, "1B"=1L,"2B"=2L,"3B"=3L,"HR"=4L,
+  reached <- switch(outcome, "1B"=1L,"2B"=2L,"3B"=3L,"HR"=4L,"ITPHR"=4L,
                     "BB"=1L,"IBB"=1L,"HBP"=1L,"FC"=1L,"E"=1L, NA_integer_)
   outs_on_play <- if (outcome %in% .OUT_OUTCOMES) 1L else 0L
   advances <- suggest_advances(state, outcome)
@@ -97,7 +97,7 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
       if (.batting_team_has_lineup(s)) {
         outcomes <- c("1B","2B","3B","HR","BB","K","GO","FO","FC","E")
         btns <- lapply(outcomes, function(o)
-          outcome_button(session$ns(paste0("o_", o)), o))
+          actionButton(session$ns(paste0("o_", o)), o, class = "btn-outline-primary bw-outcome-btn"))
         div(class = "bw-outcome-grid d-grid",
             style = "grid-template-columns: repeat(5,1fr); gap:.5rem;", !!!btns)
       } else {

@@ -54,3 +54,29 @@ test_that("a throwing configured() falls back to guest storage instead of propag
   expect_true(sf$degraded)
   expect_true(nzchar(sf$reason))
 })
+
+test_that("a missing RPostgres driver reports a driver problem, not a network problem, and never calls connect()", {
+  connect_called <- FALSE
+  sf <- storage_for_identity(
+    list(mode = "user", user_id = "u1"),
+    configured = function() TRUE,
+    driver_available = function() FALSE,
+    connect = function() { connect_called <<- TRUE; stop("should never be reached") })
+  expect_false(connect_called)
+  expect_null(sf$con)
+  expect_true(sf$degraded)
+  expect_match(sf$reason, "driver")
+  expect_no_match(sf$reason, "reach the database")
+})
+
+test_that("a reachability failure (driver present, connect() throws) still reports the network message", {
+  sf <- storage_for_identity(
+    list(mode = "user", user_id = "u1"),
+    configured = function() TRUE,
+    driver_available = function() TRUE,
+    connect = function() stop("could not connect to server"))
+  expect_null(sf$con)
+  expect_true(sf$degraded)
+  expect_match(sf$reason, "reach the database")
+  expect_no_match(sf$reason, "driver")
+})

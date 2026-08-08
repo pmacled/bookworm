@@ -1,5 +1,6 @@
 library(testthat)
 source(file.path("R", "app_config.R"))
+source(file.path("R", "boxscore.R"))
 
 test_that("%||% returns fallback for NULL and empty", {
   expect_equal(NULL %||% 5, 5)
@@ -30,4 +31,9 @@ test_that("every outcome has a label, description, and valid category", {
 test_that("the out categories match the reducer's out list", {
   outs <- names(Filter(function(m) identical(m$category, "out"), APP_CONFIG$outcome_meta))
   expect_setequal(outs, c("K", "KL", "GO", "FO", "LO", "PO"))
+})
+
+test_that("the hit categories match the box score's hit list", {
+  hits <- names(Filter(function(m) identical(m$category, "hit"), APP_CONFIG$outcome_meta))
+  expect_setequal(hits, .HIT)
 })

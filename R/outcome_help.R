@@ -1,5 +1,5 @@
-# Outcome-code help: the glossary panel and the per-button popovers.
-# Both read APP_CONFIG$outcome_meta so the vocabulary has one source of truth.
+# Outcome-code help: the glossary panel.
+# Reads APP_CONFIG$outcome_meta so the vocabulary has one source of truth.
 
 .OUTCOME_CATEGORY_LABELS <- c(
   hit = "Hits", on_base = "Reached base", out = "Outs", other = "Other"
@@ -23,18 +23,8 @@ outcome_help_ui <- function() {
   tagList(
     tags$div(class = "p-3",
       tags$p(class = "text-muted small",
-        "Codes you can record for a plate appearance. Tap and hold an outcome button during a game for the same description."),
+        paste("Outcome codes used in Bookworm. The ten most common have buttons",
+              "on the tracking screen; the rest are recognised by the scorebook",
+              "and by imported games.")),
       !!!Filter(Negate(is.null), sections)))
-}
-
-# Wraps an outcome actionButton in a popover carrying its label and description.
-# `ns_id` must already be namespaced; the button's id is unchanged so the existing
-# observeEvent(input[[paste0("o_", code)]]) wiring keeps working.
-outcome_button <- function(ns_id, code) {
-  m <- APP_CONFIG$outcome_meta[[code]]
-  if (is.null(m)) stop(sprintf("unknown outcome code: %s", code))
-  bslib::popover(
-    actionButton(ns_id, code, class = "btn-outline-primary bw-outcome-btn"),
-    tags$strong(m$label), tags$br(), m$description,
-    title = code, placement = "top")
 }

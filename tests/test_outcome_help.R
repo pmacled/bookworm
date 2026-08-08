@@ -18,12 +18,3 @@ test_that("the help panel groups by category", {
     expect_true(grepl(heading, html, fixed = TRUE), info = paste("missing heading:", heading))
 })
 
-test_that("an outcome button keeps its id and carries its description", {
-  html <- as.character(outcome_button("track-o_1B", "1B"))
-  expect_true(grepl('id="track-o_1B"', html, fixed = TRUE))
-  expect_true(grepl("Batter reaches first base safely", html, fixed = TRUE))
-})
-
-test_that("outcome_button rejects an unknown code", {
-  expect_error(outcome_button("track-o_ZZ", "ZZ"), "unknown outcome")
-})

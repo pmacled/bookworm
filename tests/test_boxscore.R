@@ -52,3 +52,11 @@ test_that("a player with no order_slot still appears, after the batters", {
   expect_equal(df$Player[2], "Sub")
   expect_true(is.na(df$Order[2]))
 })
+
+test_that("an empty lineup (run-only team) still yields all eight columns", {
+  st <- initial_game_state()
+  st$lineups$away <- list()
+  df <- batting_lines(st, "away")
+  expect_equal(nrow(df), 0L)
+  expect_identical(names(df), c("Order", "Player", "AB", "R", "H", "RBI", "BB", "K"))
+})

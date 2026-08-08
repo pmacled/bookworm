@@ -11,9 +11,11 @@ auth_ui <- function(id) {
     passwordInput(ns("password"), "Password"),
     div(class = "d-flex gap-2 flex-wrap",
       actionButton(ns("do_sign_in"), "Sign in",
-        class = if (configured) "btn-primary" else "btn-outline-secondary disabled"),
+        class = if (configured) "btn-primary" else "btn-outline-secondary disabled",
+        disabled = !configured),
       actionButton(ns("do_sign_up"), "Create account",
-        class = if (configured) "btn-outline-secondary" else "btn-outline-secondary disabled"),
+        class = if (configured) "btn-outline-secondary" else "btn-outline-secondary disabled",
+        disabled = !configured),
       actionButton(ns("do_guest"), "Continue as guest",
         class = if (configured) "btn-link" else "btn-primary")),
     div(class = "text-danger small mt-2", textOutput(ns("err")))
