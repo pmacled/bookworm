@@ -10,7 +10,8 @@ default_ruleset_config <- function() {
     open_last_inning = TRUE,
     mercy_rule = list(differential = NA_integer_, after_inning = NA_integer_),
     short_lineup_auto_out = FALSE,
-    courtesy_runner = FALSE
+    courtesy_runner = FALSE,
+    batting_size = NA_integer_
   )
 }
 
@@ -28,6 +29,8 @@ coerce_ruleset_config <- function(cfg) {
   d$fielding$min_females <- as.integer(d$fielding$min_females)
   d$mercy_rule$differential <- .as_int_or_na(d$mercy_rule$differential)
   d$mercy_rule$after_inning <- .as_int_or_na(d$mercy_rule$after_inning)
+  d$batting_size <- .as_int_or_na(d$batting_size)
+  if (!is.na(d$batting_size) && d$batting_size < 1L) d$batting_size <- NA_integer_
   d
 }
 
@@ -38,8 +41,7 @@ validate_ruleset_config <- function(cfg) {
   b <- cfg$starting_count$balls; s <- cfg$starting_count$strikes
   if (!is.numeric(b) || b < 0 || b > 3) add("starting balls must be 0-3")
   if (!is.numeric(s) || s < 0 || s > 2) add("starting strikes must be 0-2")
-  if (!identical(cfg$foul_out_rule, "out") &&
-      !identical(cfg$foul_out_rule, "one_courtesy_foul")) add("invalid foul_out_rule")
+  if (!cfg$foul_out_rule %in% c("out", "one_courtesy_foul", "unlimited")) add("invalid foul_out_rule")
 
   bg <- cfg$batting_gender_rule$type
   if (!bg %in% c("none", "no_two_males_consecutive", "every_other", "every_n")) {
@@ -50,6 +52,10 @@ validate_ruleset_config <- function(cfg) {
   }
   if (!cfg$male_walk_rule %in% c("none", "two_bases_then_female")) add("invalid male_walk_rule")
   if (!is.numeric(cfg$innings) || cfg$innings < 1) add("innings must be >= 1")
+
+  if (!is.na(cfg$batting_size) && (!is.numeric(cfg$batting_size) || cfg$batting_size < 1)) {
+    add("batting_size must be a positive integer or NA (unlimited)")
+  }
 
   list(ok = length(errors) == 0, errors = errors)
 }
