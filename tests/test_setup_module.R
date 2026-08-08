@@ -12,3 +12,29 @@ test_that("build_game_start_event assembles a valid event", {
   expect_equal(evt$payload$first_bat, "away")
   expect_true(validate_event(evt)$ok)
 })
+
+test_that("collect_lineup reads rows, skips blanks, assigns order_slot", {
+  input <- list(
+    t_name_1 = "Sam", t_gender_1 = "F", t_jersey_1 = 9, t_pos_1 = "SS",
+    t_name_2 = "",    t_gender_2 = "M", t_jersey_2 = NA, t_pos_2 = "",   # blank name -> skipped
+    t_name_3 = "Mo",  t_gender_3 = "M", t_jersey_3 = NA, t_pos_3 = ""    # blank jersey -> 0
+  )
+  lu <- collect_lineup(input, "t", c(1,2,3))
+  expect_equal(length(lu), 2L)
+  expect_equal(lu[[1]]$name, "Sam"); expect_equal(lu[[1]]$order_slot, 1L)
+  expect_equal(lu[[1]]$position, "SS"); expect_equal(lu[[1]]$jersey_number, 9L)
+  expect_equal(lu[[2]]$name, "Mo"); expect_equal(lu[[2]]$order_slot, 2L)
+  expect_equal(lu[[2]]$jersey_number, 0L); expect_true(is.na(lu[[2]]$position))
+})
+
+test_that("collect_lineup returns an empty list when no rows have names", {
+  expect_equal(length(collect_lineup(list(), "t", integer())), 0L)
+})
+
+test_that("build_game_start_event accepts an empty lineup (run-only team)", {
+  home <- list(team_id="H", name="Home", lineup = list())  # empty
+  away <- list(team_id="A", name="Away", lineup = list(make_player("a1","A1","F",1L,1L,"SS")))
+  evt <- build_game_start_event(default_ruleset_config(), home, away, "away")
+  expect_true(validate_event(evt)$ok)
+  expect_equal(length(evt$payload$home$lineup), 0L)
+})
