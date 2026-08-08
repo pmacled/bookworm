@@ -144,3 +144,32 @@ test_that("game_should_end does not crash on a mercy tier missing after_inning e
              ruleset = cfg, outs = 0L)
   expect_true(game_should_end(cfg, st))   # must not error; defaults after_inning to 1
 })
+
+usa_mercy <- function() coerce_ruleset_config(list(innings = 7L, mercy_rule = list(tiers = list(
+  list(after_inning = 3L, differential = 20L),
+  list(after_inning = 4L, differential = 15L),
+  list(after_inning = 5L, differential = 10L)))))
+
+st_at <- function(cfg, inning, home, away)
+  list(inning = inning, half = "top", score = list(home = home, away = away),
+       ruleset = cfg, outs = 0L)
+
+test_that("any satisfied mercy tier ends the game", {
+  cfg <- usa_mercy()
+  expect_true(game_should_end(cfg,  st_at(cfg, 3L, 25L, 3L)))   # 22 after 3
+  expect_false(game_should_end(cfg, st_at(cfg, 3L, 15L, 3L)))   # 12 after 3: not yet
+  expect_true(game_should_end(cfg,  st_at(cfg, 4L, 19L, 3L)))   # 16 after 4
+  expect_true(game_should_end(cfg,  st_at(cfg, 5L, 14L, 3L)))   # 11 after 5
+  expect_false(game_should_end(cfg, st_at(cfg, 5L, 12L, 3L)))   # 9 after 5: not yet
+})
+
+test_that("mercy works in either direction", {
+  cfg <- usa_mercy()
+  expect_true(game_should_end(cfg, st_at(cfg, 5L, 3L, 14L)))
+})
+
+test_that("no mercy tiers means only regulation ends the game", {
+  cfg <- coerce_ruleset_config(list(innings = 7L))
+  expect_false(game_should_end(cfg, st_at(cfg, 5L, 40L, 0L)))
+  expect_true(game_should_end(cfg,  st_at(cfg, 8L, 1L, 0L)))
+})
