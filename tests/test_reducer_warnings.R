@@ -26,8 +26,6 @@ test_that("warnings is a list of structured items and flags batting gender order
 test_that("a fielding violation surfaces as a warning item during defense", {
   cfg <- coerce_ruleset_config(list(fielding = STANDARD_COED_FIELDING))
   # away bats (top); home is the defense with an all-male positioned defense.
-  # Fold a plate appearance too: game_start does NOT run .refresh_flags, so a
-  # non-game_start event is needed for warnings to compute.
   home <- mk("h", rep("M", 4), positions = c("P","C","SS","LF"))
   away <- mk("a", c("M","F"))
   s <- fold_events(list(

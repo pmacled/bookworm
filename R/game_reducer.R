@@ -70,7 +70,9 @@ advance_half <- function(state) {
 
   if (isTRUE(state$cap_hit_last_play)) {
     w <- c(w, list(list(severity = "notice", code = "run_cap",
-      message = sprintf("Run cap of %d reached this inning.", cfg$run_cap$per_inning))))
+      message = sprintf(
+        "Run cap of %d reached this inning. Runs beyond the cap only count if they happen in the same at-bat that reaches it.",
+        cfg$run_cap$per_inning))))
   }
 
   bs <- cfg$batting_size
@@ -127,7 +129,13 @@ apply_event <- function(state, evt) {
   if (type == "half_runs") {
     team <- state$batting_team
     runs <- as.integer(evt$payload$runs %||% 0L)
-    cr <- apply_run_cap(state$ruleset, state$runs_this_half, runs, state$inning)
+    # A half_runs entry is a bulk total for the whole half, not a single play in
+    # progress, so same_play_runs_count (which exists to let one play finish in
+    # full, e.g. a grand slam) must not apply: a bulk entry is always clamped
+    # at the cap, regardless of the ruleset's same_play_runs_count setting.
+    cap_cfg <- state$ruleset
+    cap_cfg$run_cap$same_play_runs_count <- FALSE
+    cr <- apply_run_cap(cap_cfg, state$runs_this_half, runs, state$inning)
     state$score[[team]] <- state$score[[team]] + cr$runs
     state$runs_this_half <- state$runs_this_half + cr$runs
     state <- advance_half(state)

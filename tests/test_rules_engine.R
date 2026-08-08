@@ -62,6 +62,7 @@ test_that("legacy scalar run-cap keys migrate into run_cap", {
   expect_false(cfg$run_cap$open_last_inning)
   expect_true(cfg$run_cap$same_play_runs_count)   # new field takes its default
   expect_null(cfg$run_cap_per_inning)             # old key is gone, not shadowing
+  expect_true(validate_ruleset_config(cfg)$ok)
 })
 
 test_that("legacy scalar mercy keys migrate into a single tier", {
@@ -70,33 +71,74 @@ test_that("legacy scalar mercy keys migrate into a single tier", {
   expect_equal(cfg$mercy_rule$tiers[[1]]$differential, 10L)
   expect_equal(cfg$mercy_rule$tiers[[1]]$after_inning, 4L)
   expect_null(cfg$mercy_rule$differential)
+  expect_true(validate_ruleset_config(cfg)$ok)
 })
 
 test_that("a legacy mercy differential with no after_inning defaults to inning 1", {
   cfg <- coerce_ruleset_config(list(mercy_rule = list(differential = 10L)))
   expect_equal(cfg$mercy_rule$tiers[[1]]$after_inning, 1L)
+  expect_true(validate_ruleset_config(cfg)$ok)
 })
 
 test_that("legacy batting-gender type names migrate", {
   a <- coerce_ruleset_config(list(batting_gender_rule = list(type = "no_two_males_consecutive")))
   expect_equal(a$batting_gender_rule$type, "max_consecutive_males")
   expect_equal(a$batting_gender_rule$n, 1L)
+  expect_true(validate_ruleset_config(a)$ok)
 
   b <- coerce_ruleset_config(list(batting_gender_rule = list(type = "every_other")))
   expect_equal(b$batting_gender_rule$type, "max_consecutive_same_gender")
   expect_equal(b$batting_gender_rule$n, 1L)
+  expect_true(validate_ruleset_config(b)$ok)
 
   c3 <- coerce_ruleset_config(list(batting_gender_rule = list(type = "every_n", n = 4L)))
   expect_equal(c3$batting_gender_rule$type, "min_females_per_n")
   expect_equal(c3$batting_gender_rule$n, 4L)
+  expect_true(validate_ruleset_config(c3)$ok)
 })
 
 test_that("the legacy courtesy_runner boolean migrates", {
   on  <- coerce_ruleset_config(list(courtesy_runner = TRUE))
   expect_true(is.na(on$pinch_runner$max_per_game))     # unlimited
+  expect_null(on$courtesy_runner)
+  expect_true(validate_ruleset_config(on)$ok)
+
   off <- coerce_ruleset_config(list(courtesy_runner = FALSE))
   expect_equal(off$pinch_runner$max_per_game, 0L)
-  expect_null(on$courtesy_runner)
+  expect_true(validate_ruleset_config(off)$ok)
+})
+
+test_that("courtesy_runner = TRUE does not blank out the rest of pinch_runner", {
+  # Regression: migration's TRUE branch sets no key at all (pinch_runner stays
+  # list()), and merging an *empty* unnamed list used to be treated the same as
+  # merging a non-empty array -- wiping the default's eligibility/allowed_for
+  # instead of leaving them untouched.
+  cfg <- coerce_ruleset_config(list(courtesy_runner = TRUE))
+  expect_equal(cfg$pinch_runner$eligibility, "anyone")
+  expect_equal(cfg$pinch_runner$allowed_for, "anyone")
+  expect_length(cfg$pinch_runner, 5L)
+  expect_true(validate_ruleset_config(cfg)$ok)
+})
+
+test_that("coercing an empty or NULL config returns full, valid defaults", {
+  # Regression: an empty top-level list has no names either, so the same
+  # "unnamed list -> replace wholesale" rule that correctly replaces `tiers`
+  # was, before the fix, also nuking the *entire* default config to list().
+  for (cfg in list(coerce_ruleset_config(list()), coerce_ruleset_config(NULL))) {
+    expect_equal(cfg$preset, "anything_goes")
+    expect_equal(cfg$foul_out_rule, "unlimited")
+    expect_equal(cfg$male_walk_rule, "none")
+    expect_false(cfg$short_lineup_auto_out)
+    expect_length(cfg, 13L)
+    expect_true(validate_ruleset_config(cfg)$ok)
+  }
+})
+
+test_that("an explicitly empty fielding override keeps the rest of the fielding defaults", {
+  cfg <- coerce_ruleset_config(list(fielding = list()))
+  expect_equal(cfg$fielding$min_females, 0L)
+  expect_true(is.na(cfg$fielding$max_males))
+  expect_true(validate_ruleset_config(cfg)$ok)
 })
 
 test_that("migration is idempotent", {
@@ -105,6 +147,7 @@ test_that("migration is idempotent", {
              batting_gender_rule = list(type = "every_other")))
   twice <- coerce_ruleset_config(once)
   expect_identical(once, twice)
+  expect_true(validate_ruleset_config(once)$ok)
 })
 
 test_that("validation rejects the new enums", {

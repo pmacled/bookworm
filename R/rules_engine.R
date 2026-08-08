@@ -34,7 +34,13 @@ default_ruleset_config <- function() {
   if (!is.list(val)) return(val)
   vnames <- names(val)
   vnames <- if (is.null(vnames)) character() else vnames[nzchar(vnames)]
-  if (length(vnames) == 0L) return(val)  # array: replace wholesale
+  if (length(vnames) == 0L) {
+    # An unnamed, non-empty list is an array (tiers): replace wholesale. But an
+    # *empty* list has no names either, and here it always means "the caller
+    # didn't override this dict" (e.g. migrated `courtesy_runner = TRUE` leaves
+    # pinch_runner = list()), not "replace the dict with nothing" -- keep `x`.
+    return(if (length(val) == 0L) x else val)
+  }
   if (!is.list(x)) x <- list()
   for (v in vnames) {
     x[[v]] <- if (v %in% names(x) && is.list(x[[v]]) && is.list(val[[v]]))
@@ -193,17 +199,29 @@ next_batter_gender_ok <- function(cfg, prev_genders, next_gender) {
   type <- rule$type
   if (identical(type, "none")) return(TRUE)
   n <- rule$n
+  # A rule that needs n but never got one (e.g. a persisted event that never
+  # re-validated) must fail open, not crash: tail(x, NA + 1L) throws.
+  if (is.na(n)) return(TRUE)
+  # NA-safe equality: an unknown gender (NA) must never satisfy `identical(x, g)`,
+  # whereas the vectorized `x == g` used previously turns any NA in `recent` into
+  # an NA result, and all()/any() on a vector containing NA (with no TRUE already
+  # present) returns NA rather than TRUE/FALSE -- which then blows up the caller's
+  # `if (!next_batter_gender_ok(...))`.
+  is_g <- function(x, g) !is.na(x) && identical(x, g)
+
   if (identical(type, "max_consecutive_males")) {
     recent <- tail(c(prev_genders, next_gender), n + 1L)
-    return(!(length(recent) == n + 1L && all(recent == "M")))
+    all_m <- length(recent) == n + 1L && all(vapply(recent, is_g, logical(1), "M"))
+    return(!all_m)
   }
   if (identical(type, "max_consecutive_same_gender")) {
     recent <- tail(c(prev_genders, next_gender), n + 1L)
-    return(!(length(recent) == n + 1L && length(unique(recent)) == 1L))
+    all_same <- length(recent) == n + 1L && !is.na(recent[1]) && length(unique(recent)) == 1L
+    return(!all_same)
   }
   if (identical(type, "min_females_per_n")) {
     recent <- tail(c(prev_genders, next_gender), n)
-    return(any(recent == "F"))  # at least one F in every window of n
+    return(any(vapply(recent, is_g, logical(1), "F")))  # at least one F in every window of n
   }
   TRUE
 }
@@ -270,26 +288,41 @@ evaluate_fielding <- function(cfg, defense_lineup) {
 }
 
 # Returns how many of `runs_on_play` actually count, and whether the cap was reached.
-# same_play_runs_count = TRUE: a play in progress completes fully; the cap stops the
-# *next* batter. FALSE: runs are clamped mid-play at the cap.
+# same_play_runs_count = TRUE: a play in progress completes fully -- even a play that
+# pushes the half past the cap (e.g. a grand slam) counts every run -- but once an
+# *earlier* play has already brought the half to the cap, this play is stopped
+# entirely: the cap stops the *next* batter, not the one at bat when it was reached.
+# same_play_runs_count = FALSE: runs are clamped mid-play, right at the cap.
 apply_run_cap <- function(cfg, runs_before, runs_on_play, inning) {
-  rc <- cfg$run_cap
+  # `cfg[["run_cap", exact = TRUE]]`, not `cfg$run_cap`: callers are expected to pass
+  # an already-coerced ruleset (no flat legacy keys left to collide with), but this
+  # guards the one remaining spot that trusted that instead of enforcing it.
+  rc <- cfg[["run_cap", exact = TRUE]]
   cap <- rc$per_inning
   runs_on_play <- as.integer(runs_on_play)
+  runs_before <- as.integer(runs_before)
   if (is.na(cap)) return(list(runs = runs_on_play, cap_hit = FALSE))
   if (isTRUE(rc$open_last_inning) && inning >= cfg$innings)
     return(list(runs = runs_on_play, cap_hit = FALSE))
-  total <- as.integer(runs_before) + runs_on_play
-  runs <- if (isTRUE(rc$same_play_runs_count)) runs_on_play
-          else max(0L, cap - as.integer(runs_before))
+  total <- runs_before + runs_on_play
+  runs <- if (isTRUE(rc$same_play_runs_count)) {
+    if (runs_before >= cap) 0L else runs_on_play
+  } else {
+    max(0L, cap - runs_before)
+  }
   list(runs = as.integer(runs), cap_hit = total >= cap)
 }
 
 game_should_end <- function(cfg, state) {
   diff <- abs(state$score$home - state$score$away)
   for (t in cfg$mercy_rule$tiers %||% list()) {
-    after <- if (is.na(t$after_inning)) 1L else t$after_inning  # %||% won't catch NA
-    if (!is.na(t$differential) && state$inning >= after && diff >= t$differential) return(TRUE)
+    # %||% NA_integer_ first: a tier missing a key entirely (t$after_inning is
+    # then NULL, not NA) must not reach `is.na(t$after_inning)` -- and a
+    # persisted event never re-validates, so a malformed tier is reachable here.
+    after <- t$after_inning %||% NA_integer_
+    after <- if (is.na(after)) 1L else after
+    diff_needed <- t$differential %||% NA_integer_
+    if (!is.na(diff_needed) && state$inning >= after && diff >= diff_needed) return(TRUE)
   }
   # Regulation complete: finished the bottom of the final inning.
   if (state$inning > cfg$innings) return(TRUE)
