@@ -108,8 +108,16 @@ Surface it two ways:
 
 - A **Help** nav panel in the tracking view listing every code grouped by category, with
   its label and description.
-- A popover on each outcome button in the action panel showing label + description.
-  Use `bslib::popover()`; it must not interfere with the button's click handler on touch.
+- ~~A popover on each outcome button in the action panel showing label + description.
+  Use `bslib::popover()`; it must not interfere with the button's click handler on touch.~~
+
+  **Reversed during slice 2.0's final review.** `bslib::popover()` resolves its trigger to
+  `"click"` on a `<button>`, so the popover fires on the same tap that records the play —
+  the interference this bullet tried to forbid is unavoidable with that component. On a
+  mobile-first app whose primary loop is tapping ten buttons a hundred times a game, that
+  is disqualifying. The owner ruled the popovers out entirely; the Help panel alone carries
+  the glossary, and `outcome_button()` was deleted. Any future inline help must not overlay
+  the action grid on the recording tap.
 
 `APP_CONFIG$outcome_codes` is derived from `names(APP_CONFIG$outcome_meta)` so the two can
 never drift.

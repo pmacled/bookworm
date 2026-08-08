@@ -903,8 +903,9 @@ batting_line_for <- function(state, team, player_id) {
 Then rewrite `batting_lines()` to call `.accumulate_batting()` and build its data frame
 from the result, keeping the `Order`/`Player` columns from slice 2.0 Task 4.
 
-`.HIT` must gain `"ITPHR"`: an inside-the-park home run is a hit and a run. Change the
-constant to `c("1B","2B","3B","HR","ITPHR")`. Add a test for it in `tests/test_boxscore.R`.
+~~`.HIT` must gain `"ITPHR"`~~ — **already done.** Slice 2.0's final fix wave added
+`"ITPHR"` to `.HIT` and added an invariant test in `tests/test_app_config.R` binding the
+glossary's `category == "hit"` set to `.HIT`. Verify it is still in place; do not re-apply.
 
 - [ ] **Step 4: Create `R/situation_card.R`**
 

@@ -325,6 +325,13 @@ git commit -m "feat: outcome_meta glossary; add ITPHR; derive outcome_codes"
 
 ### Task 3: Help panel and outcome-button popovers
 
+> **Partially superseded — historical record.** This task shipped as written, but the
+> final whole-branch review found `bslib::popover()` resolves its trigger to `"click"` on
+> a `<button>`, so tapping an outcome both recorded the play and popped the description
+> over the grid. The owner ruled the per-button popovers out; `outcome_button()` and its
+> tests were deleted in the final fix wave, and the action panel builds plain
+> `actionButton`s. The `outcome_help_ui()` Help panel below is unchanged and still current.
+
 **Files:**
 - Modify: `R/tracking_module.R:36-48` (`tracking_ui`), `R/tracking_module.R:91-106` (`output$action_panel`)
 - Create: `R/outcome_help.R`

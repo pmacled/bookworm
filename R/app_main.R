@@ -20,22 +20,24 @@ bookworm_server <- function(input, output, session) {
   store <- reactiveVal(NULL)
   game_start <- setup_server("setup")
 
+  degraded <- reactiveVal(NULL)
+
   observeEvent(identity(), {
     req(!is.na(identity()$mode))
     sf <- storage_for_identity(identity())
     store(sf$storage)
+    degraded(if (isTRUE(sf$degraded)) sf$reason else NULL)
     if (!is.null(sf$con)) onStop(function() DBI::dbDisconnect(sf$con))
     nav_select("screen", "setup")
   }, ignoreInit = TRUE)
 
   output$guest_banner <- renderUI({
     req(!is.null(identity()))
-    if (identical(identity()$mode, "guest")) {
-      div(
-        class = "alert alert-warning m-2 py-2 small",
-        "Guest mode: sign in to save. Refreshing will lose this game."
-      )
-    }
+    if (!is.null(degraded()))
+      div(class = "alert alert-danger m-2 py-2 small", degraded())
+    else if (identical(identity()$mode, "guest"))
+      div(class = "alert alert-warning m-2 py-2 small",
+        "Guest mode: sign in to save. Refreshing will lose this game.")
   })
 
   observeEvent(game_start(), {

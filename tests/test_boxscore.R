@@ -17,7 +17,7 @@ test_that("batting lines count H, AB, K, BB", {
     pa("a2","K",NA_integer_,3L,outs=1L),
     pa("a3","BB",1L,4L)))
   bl <- batting_lines(s, "away")
-  a1 <- bl[bl$player_id=="a1",]; a2 <- bl[bl$player_id=="a2",]; a3 <- bl[bl$player_id=="a3",]
+  a1 <- bl[bl$Player=="a 1",]; a2 <- bl[bl$Player=="a 2",]; a3 <- bl[bl$Player=="a 3",]
   expect_equal(a1$H, 1L); expect_equal(a1$AB, 1L)
   expect_equal(a2$K, 1L); expect_equal(a2$AB, 1L)
   expect_equal(a3$BB, 1L); expect_equal(a3$AB, 0L)  # walks are not at-bats
@@ -28,4 +28,35 @@ test_that("line score exposes R/H/E totals", {
   ls <- line_score(s)
   expect_true(is.list(ls$away))
   expect_true(!is.null(ls$away$H))
+})
+
+test_that("batting_lines exposes no player_id and is ordered by batting slot", {
+  lu <- list(make_player("a1", "Ann", "F", 7L, 2L, "SS"),
+             make_player("a2", "Bo",  "M", 3L, 1L, "P"))
+  st <- initial_game_state()
+  st$lineups$away <- lu
+  df <- batting_lines(st, "away")
+  expect_false("player_id" %in% names(df))
+  expect_identical(names(df), c("Order", "Player", "AB", "R", "H", "RBI", "BB", "K"))
+  expect_equal(df$Order, c(1L, 2L))
+  expect_equal(df$Player, c("Bo", "Ann"))
+})
+
+test_that("a player with no order_slot still appears, after the batters", {
+  lu <- list(make_player("a1", "Ann", "F", 7L, 1L, "SS"),
+             make_player("a2", "Sub", "M", 3L, NA_integer_, NA_character_))
+  st <- initial_game_state()
+  st$lineups$away <- lu
+  df <- batting_lines(st, "away")
+  expect_equal(nrow(df), 2L)
+  expect_equal(df$Player[2], "Sub")
+  expect_true(is.na(df$Order[2]))
+})
+
+test_that("an empty lineup (run-only team) still yields all eight columns", {
+  st <- initial_game_state()
+  st$lineups$away <- list()
+  df <- batting_lines(st, "away")
+  expect_equal(nrow(df), 0L)
+  expect_identical(names(df), c("Order", "Player", "AB", "R", "H", "RBI", "BB", "K"))
 })
