@@ -11,7 +11,8 @@
 ## Global Constraints
 
 - Spec: `docs/superpowers/specs/2026-08-08-bookworm-slice-two-design.md`, section "Slice 2.2".
-- **Depends on slice 2.1 being merged.** `evaluate_home_run_limit()`, `evaluate_pinch_runner()`, `state$pinch_runner_log`, and the nested ruleset schema must exist. Depends on slice 2.0 for `APP_CONFIG$outcome_meta` and `outcome_button()`.
+- **Depends on slice 2.1 being merged.** `evaluate_home_run_limit()`, `evaluate_pinch_runner()`, `state$pinch_runner_log`, and the nested ruleset schema must exist. Depends on slice 2.0 for `APP_CONFIG$outcome_meta`.
+- **`outcome_button()` does not exist.** An earlier draft of this plan depended on it. Slice 2.0's final review found `bslib::popover()` fires on the same tap that records a play, and the owner ruled the per-button popovers out; the function was deleted. Outcome buttons are plain `actionButton(ns(paste0("o_", code)), code, class = "btn-outline-primary bw-outcome-btn")`. Do not reintroduce a popover on them.
 - Run every command from the **project root**. Rscript: `"/c/Program Files/R/R-4.5.3/bin/Rscript.exe"`.
 - `Rscript run_tests.R` must exit 0 at the end of **every task**.
 - Events written by slice 1.1 must still fold. `apply_plate_appearance()`'s `reached` fallback stays as a compatibility path.
