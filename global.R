@@ -1,5 +1,6 @@
 library(shiny)
 library(bslib)
+library(DT)
 library(htmltools)
 library(jsonlite)
 library(DBI)

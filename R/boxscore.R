@@ -20,10 +20,16 @@ batting_lines <- function(state, team) {
     RBI[[id]] <- RBI[[id]] + as.integer(rec$rbi %||% 0L)
     if (!is.na(rec$reached) && rec$reached == 4L) R[[id]] <- R[[id]] + 1L
   }
-  data.frame(player_id = ids, name = names_,
+  ord <- vapply(lineup, function(p) p$order_slot %||% NA_integer_, integer(1))
+  df <- data.frame(
+    Order = ord, Player = names_,
     AB = unlist(AB[ids]), R = unlist(R[ids]), H = unlist(H[ids]),
     RBI = unlist(RBI[ids]), BB = unlist(BB[ids]), K = unlist(K[ids]),
     row.names = NULL, stringsAsFactors = FALSE)
+  # Batters in order, then anyone without a slot (defensive subs, unentered players).
+  df <- df[order(is.na(df$Order), df$Order), , drop = FALSE]
+  rownames(df) <- NULL
+  df
 }
 
 line_score <- function(state) {
