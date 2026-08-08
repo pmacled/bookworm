@@ -11,3 +11,6 @@
 
 # R data / package artifacts
 *.rds
+
+# Git worktrees created for parallel feature work
+.claude/worktrees/
