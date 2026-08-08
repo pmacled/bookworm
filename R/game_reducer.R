@@ -21,11 +21,11 @@ reset_count <- function(state) {
   state
 }
 
-.set_current_batter <- function(state) {
-  team <- state$batting_team
+.set_current_batter <- function(state, team = state$batting_team) {
   lineup <- state$lineups[[team]]
   if (length(lineup) == 0) { state$current_batter <- NULL; return(state) }
   batters <- Filter(function(p) !is.na(p$order_slot), lineup)
+  if (length(batters) == 0) { state$current_batter <- NULL; return(state) }
   batters <- batters[order(vapply(batters, function(p) p$order_slot, integer(1)))]
   idx <- (state$batting_index[[team]] %% length(batters))
   state$current_batter <- batters[[idx + 1]]
@@ -47,6 +47,43 @@ advance_half <- function(state) {
   state <- reset_count(state)
   state <- .set_current_batter(state)
   state
+}
+
+# Replays the batting-order gender rule over plate appearances already recorded for
+# `team`, using the lineup that is now known. Returns a single violation naming the
+# earliest offending batter, or NULL. This is what surfaces a rule break that could not
+# be evaluated while the lineup was empty.
+#
+# `code` defaults to the lineup_set-specific label ("batting_gender_retro"); the
+# plate_appearance branch below reuses this same scan (passing code = "batting_gender")
+# so a violation stays visible in state$warnings after the fact, since the live
+# due-up check in .refresh_flags only looks forward to the *next* batter and stops
+# flagging the play as soon as it's in the past.
+.retro_batting_gender_violation <- function(state, team, code = "batting_gender_retro") {
+  cfg <- state$ruleset
+  if (identical(cfg$batting_gender_rule$type, "none")) return(NULL)
+  recs <- Filter(function(r) identical(r$team, team), state$pa_log %||% list())
+  if (length(recs) < 2L) return(NULL)
+  gender_of <- function(id) {
+    hit <- Filter(function(p) identical(p$player_id, id), state$lineups[[team]])
+    if (length(hit)) hit[[1]]$gender else NA_character_
+  }
+  seen <- character()
+  for (r in recs) {
+    g <- gender_of(r$batter_id)
+    if (is.na(g)) next
+    if (!next_batter_gender_ok(cfg, seen, g)) {
+      # Report the batter_id, not the roster `name`: batter_id is the stable
+      # identifier the log was written with, so it always identifies the actual
+      # offending record even if the name field is display-formatted oddly.
+      return(list(severity = "violation", code = code,
+        message = sprintf(
+          "Batting order: %s batted out of order under this ruleset (inning %d).",
+          r$batter_id, r$inning)))
+    }
+    seen <- c(seen, g)
+  }
+  NULL
 }
 
 .refresh_flags <- function(state) {
@@ -124,8 +161,16 @@ apply_event <- function(state, evt) {
   if (type == "inning_end") return(.refresh_flags(advance_half(state)))
   if (type == "plate_appearance") {
     # Full advance/scoring logic added in Task 5; core handles outs + turn here.
+    team <- evt$payload$team
     state <- apply_plate_appearance(state, evt)   # defined in Task 5
-    return(.refresh_flags(state))
+    state <- .refresh_flags(state)
+    # The due-up check inside .refresh_flags only looks forward, at whoever bats
+    # next; once that batter's own turn passes it stops flagging them. Re-scan the
+    # completed log so a gender-order break already on the books (now that this
+    # team's lineup -- and thus genders -- are known) stays visible as a warning.
+    retro <- .retro_batting_gender_violation(state, team, code = "batting_gender")
+    if (!is.null(retro)) state$warnings <- c(state$warnings, list(retro))
+    return(state)
   }
   if (type == "half_runs") {
     team <- state$batting_team
@@ -142,6 +187,23 @@ apply_event <- function(state, evt) {
     state <- advance_half(state)
     state$cap_hit_last_play <- cr$cap_hit   # set AFTER advance_half so the notice survives
     return(.refresh_flags(state))
+  }
+  if (type == "lineup_set") {
+    team <- evt$payload$team
+    state$lineups[[team]] <- evt$payload$lineup %||% list()
+    n <- length(Filter(function(p) !is.na(p$order_slot), state$lineups[[team]]))
+    if (n > 0L) state$batting_index[[team]] <- state$batting_index[[team]] %% n
+    else state$batting_index[[team]] <- 0L
+    # Refresh the current batter for `team` specifically: lineup_set can arrive for
+    # either team, not only the one currently at bat (e.g. entering a defensive
+    # team's lineup while the run-only team bats). Falling back to state$batting_team
+    # here would leave current_batter untouched -- and NULL -- whenever team differs
+    # from whoever is up, defeating the clamp this branch just computed.
+    state <- .set_current_batter(state, team)
+    state <- .refresh_flags(state)
+    retro <- .retro_batting_gender_violation(state, team)
+    if (!is.null(retro)) state$warnings <- c(state$warnings, list(retro))
+    return(state)
   }
   if (type == "substitution") return(.refresh_flags(apply_substitution(state, evt)))  # Task 7
   state
