@@ -78,16 +78,6 @@ next_batter_gender_ok <- function(cfg, prev_genders, next_gender) {
   TRUE
 }
 
-fielding_warnings <- function(cfg, defense_lineup) {
-  warns <- character()
-  on_d <- Filter(function(p) !is.na(p$position), defense_lineup)
-  n_f <- sum(vapply(on_d, function(p) identical(p$gender, "F"), logical(1)))
-  if (n_f < (cfg$fielding$min_females %||% 0L))
-    warns <- c(warns, sprintf("Fielding requires ≥ %d female players (currently %d).",
-                              cfg$fielding$min_females, n_f))
-  warns
-}
-
 STANDARD_COED_FIELDING <- list(
   min_females = 4L, max_males = 6L,
   tiers = list(

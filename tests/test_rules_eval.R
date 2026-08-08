@@ -8,12 +8,6 @@ test_that("no_two_males_consecutive flags a male after a male", {
   expect_true(next_batter_gender_ok(cfg, prev_genders = c("M"), next_gender = "F"))
 })
 
-test_that("fielding_warnings triggers below min_females", {
-  cfg <- coerce_ruleset_config(list(fielding = list(min_females = 4L)))
-  defense <- lapply(1:9, function(i) make_player(paste0("d",i), "x", "M", i, i, i))
-  expect_true(length(fielding_warnings(cfg, defense)) > 0)
-})
-
 test_that("run cap limits non-open innings", {
   cfg <- coerce_ruleset_config(list(run_cap_per_inning = 5L, innings = 7L, open_last_inning = TRUE))
   expect_equal(apply_run_cap(cfg, runs_this_half = 8L, inning = 3L), 5L)
@@ -36,7 +30,7 @@ test_that("reducer surfaces a gender-order warning for the batter due up", {
   pa1 <- new_event("plate_appearance", list(team="away", batter_id="m1", outcome="1B",
     reached=1L, rbi=0L, outs_on_play=0L, advances=list()), seq = 2L)
   s <- fold_events(list(start, pa1))   # m2 (M) now due up after m1 (M)
-  expect_true(any(grepl("gender", s$warnings, ignore.case = TRUE)))
+  expect_true(any(vapply(s$warnings, function(x) identical(x$code, "batting_gender"), logical(1))))
 })
 
 test_that("mercy with differential but no after_inning does not crash and can end", {

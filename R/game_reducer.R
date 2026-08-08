@@ -10,7 +10,7 @@ initial_game_state <- function(ruleset = default_ruleset_config()) {
     batting_index = list(home = 0L, away = 0L),
     batting_team = "away", current_batter = NULL,
     pa_log = list(), line_score = list(home = integer(), away = integer()),
-    warnings = character(), ruleset = ruleset
+    warnings = list(), ruleset = ruleset
   )
 }
 
@@ -51,7 +51,8 @@ advance_half <- function(state) {
 .refresh_flags <- function(state) {
   cfg <- state$ruleset
   def_team <- if (identical(state$batting_team, "away")) "home" else "away"
-  w <- fielding_warnings(cfg, state$lineups[[def_team]])
+  w <- evaluate_fielding(cfg, state$lineups[[def_team]])  # list of violation items
+
   if (!is.null(state$current_batter)) {
     bt <- state$batting_team
     prev_genders <- vapply(
@@ -62,11 +63,33 @@ advance_half <- function(state) {
       }, character(1))
     prev_genders <- prev_genders[!is.na(prev_genders)]
     if (!next_batter_gender_ok(cfg, prev_genders, state$current_batter$gender)) {
-      w <- c(w, "Batting order: the batter due up violates the gender rule.")
+      w <- c(w, list(list(severity = "violation", code = "batting_gender",
+        message = "Batting order: the batter due up violates the gender rule.")))
     }
   }
+
+  cap <- cfg$run_cap_per_inning
+  if (!is.na(cap) && !(isTRUE(cfg$open_last_inning) && state$inning >= cfg$innings) &&
+      state$runs_this_half >= cap) {
+    w <- c(w, list(list(severity = "notice", code = "run_cap",
+      message = sprintf("Run cap of %d reached this inning.", cap))))
+  }
+
+  bs <- cfg$batting_size
+  if (!is.na(bs)) {
+    n_bat <- length(Filter(function(p) !is.na(p$order_slot), state$lineups[[state$batting_team]]))
+    if (n_bat > 0 && n_bat != bs) {
+      w <- c(w, list(list(severity = "notice", code = "batting_size",
+        message = sprintf("Batting team has %d batters; rule expects %d.", n_bat, bs))))
+    }
+  }
+
+  if (game_should_end(cfg, state)) {
+    state$status <- "final"
+    w <- c(w, list(list(severity = "notice", code = "final", message = "Game is final.")))
+  }
+
   state$warnings <- w
-  if (game_should_end(cfg, state)) state$status <- "final"
   state
 }
 
