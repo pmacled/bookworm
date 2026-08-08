@@ -1,16 +1,11 @@
 # App-level wiring test: exercises bookworm_server's observers via testServer,
 # covering the auth -> setup -> track navigation seam that unit tests don't reach.
 library(testthat)
-suppressMessages({
-  library(shiny); library(bslib); library(htmltools)
-  library(jsonlite); library(DBI); library(httr2); library(uuid)
-})
-# Mirror global.R's load order: rule_presets.R reads STANDARD_COED_FIELDING (from
-# rules_engine.R) at source time, so a naive alphabetical sweep breaks (rule_p < rule_s).
-.r_files <- list.files("R", pattern = "\\.R$", full.names = TRUE)
-.r_first <- file.path("R", c("brand_colors.R", "app_config.R", "rules_engine.R"))
-for (f in c(.r_first, setdiff(.r_files, .r_first))) source(f)
-rm(.r_files, .r_first)
+# Source global.R itself rather than re-implementing its R/ load order here: that
+# order is a single source of truth (global.R's .r_first) instead of two copies that
+# can drift apart -- e.g. rule_presets.R reads STANDARD_COED_FIELDING (from
+# rules_engine.R) at source time, so any naive alphabetical sweep breaks.
+suppressMessages(source("global.R"))
 
 test_that("continue-as-guest wires storage and navigates without a nav error", {
   testServer(bookworm_server, {
