@@ -1402,11 +1402,12 @@ preset_choices <- function()
                   vapply(RULE_PRESETS, function(p) p$label, character(1)))
 ```
 
-Sourcing order: `global.R` sources `R/` alphabetically after `brand_colors.R` and
-`app_config.R`, so `rule_presets.R` loads after `rules_engine.R` — which it needs, because
-`.GAMEON_BASE` references `STANDARD_COED_FIELDING` at load time. `rule_presets.R` sorts
-after `rules_engine.R`? No: `rule_presets.R` < `rules_engine.R` alphabetically
-(`rule_p` < `rule_s`). **Add `rules_engine.R` to the `.r_first` vector in `global.R`**:
+**Sourcing order matters here.** `.GAMEON_BASE` references `STANDARD_COED_FIELDING` at
+*load* time, not inside a function, so `rules_engine.R` must be sourced before
+`rule_presets.R`. `global.R` sources `R/` alphabetically after its `.r_first` list, and
+`rule_presets.R` sorts *before* `rules_engine.R` (`rule_p` < `rule_s`) — so the default
+order is wrong and the app fails to start. **Add `rules_engine.R` to the `.r_first` vector
+in `global.R`**:
 
 ```r
 .r_first <- file.path("R", c("brand_colors.R", "app_config.R", "rules_engine.R"))
@@ -2221,11 +2222,12 @@ setup_server <- function(id) {
       updateSelectInput(session,  "hr_over",     selected = hr$over_limit_result)
       updateCheckboxInput(session, "hr_itp_counts", value = hr$inside_park_counts)
       pr <- cfg$pinch_runner
-      for (k in c(pr_inning = "max_per_inning", pr_game = "max_per_game",
-                  pr_player = "max_per_player_per_game"))
-        updateNumericInput(session, names(which(c(pr_inning = "max_per_inning",
-          pr_game = "max_per_game", pr_player = "max_per_player_per_game") == k)),
-          value = if (is.na(pr[[k]])) 0L else pr[[k]])
+      pr_map <- list(pr_inning = "max_per_inning", pr_game = "max_per_game",
+                     pr_player = "max_per_player_per_game")
+      for (input_id in names(pr_map)) {
+        v <- pr[[pr_map[[input_id]]]]
+        updateNumericInput(session, input_id, value = if (is.na(v)) 0L else v)
+      }
       updateSelectInput(session, "pr_elig", selected = pr$eligibility)
       updateSelectInput(session, "pr_for",  selected = pr$allowed_for)
       updateSelectInput(session, "fielding_preset",
@@ -2284,17 +2286,6 @@ setup_server <- function(id) {
     game_start
   })
 }
-```
-
-The `for (k in c(pr_inning = ...))` loop above is convoluted; replace it with the plain form:
-
-```r
-      pr_map <- list(pr_inning = "max_per_inning", pr_game = "max_per_game",
-                     pr_player = "max_per_player_per_game")
-      for (input_id in names(pr_map)) {
-        v <- pr[[pr_map[[input_id]]]]
-        updateNumericInput(session, input_id, value = if (is.na(v)) 0L else v)
-      }
 ```
 
 - [ ] **Step 7: Update the app-flow test's setup inputs**
