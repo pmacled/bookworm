@@ -4,7 +4,8 @@ default_ruleset_config <- function() {
     foul_out_rule = "out",
     batting_gender_rule = list(type = "none", n = NA_integer_),
     male_walk_rule = "none",
-    fielding = list(min_females = 0L, position_requirements = list()),
+    fielding = list(min_females = 0L, max_males = NA_integer_, tiers = list(),
+                    position_requirements = list()),
     innings = 7L,
     run_cap_per_inning = NA_integer_,
     open_last_inning = TRUE,
@@ -27,6 +28,8 @@ coerce_ruleset_config <- function(cfg) {
   d$run_cap_per_inning <- .as_int_or_na(d$run_cap_per_inning)
   d$batting_gender_rule$n <- .as_int_or_na(d$batting_gender_rule$n)
   d$fielding$min_females <- as.integer(d$fielding$min_females)
+  d$fielding$max_males <- .as_int_or_na(d$fielding$max_males)
+  d$fielding$tiers <- d$fielding$tiers %||% list()
   d$mercy_rule$differential <- .as_int_or_na(d$mercy_rule$differential)
   d$mercy_rule$after_inning <- .as_int_or_na(d$mercy_rule$after_inning)
   d$batting_size <- .as_int_or_na(d$batting_size)
@@ -83,6 +86,67 @@ fielding_warnings <- function(cfg, defense_lineup) {
     warns <- c(warns, sprintf("Fielding requires ≥ %d female players (currently %d).",
                               cfg$fielding$min_females, n_f))
   warns
+}
+
+STANDARD_COED_FIELDING <- list(
+  min_females = 4L, max_males = 6L,
+  tiers = list(
+    list(females = 3L, outfield = 1L, infield = 1L, battery = "one"),
+    list(females = 4L, outfield = 1L, infield = 1L, battery = "one"),
+    list(females = 5L, outfield = 2L, infield = 2L, battery = "one"),
+    list(females = 6L, outfield = 1L, infield = 1L, battery = "any")
+  ),
+  position_requirements = list()
+)
+
+.position_category <- function(pos) {
+  if (is.null(pos) || length(pos) != 1 || is.na(pos)) return(NA_character_)
+  key <- as.character(pos)
+  # POSITION_CATEGORY is a named CHARACTER VECTOR: `[[missing]]` throws
+  # "subscript out of bounds", so gate on membership first.
+  if (!key %in% names(APP_CONFIG$POSITION_CATEGORY)) return(NA_character_)
+  unname(APP_CONFIG$POSITION_CATEGORY[[key]])
+}
+
+evaluate_fielding <- function(cfg, defense_lineup) {
+  f <- cfg$fielding
+  viol <- list()
+  add <- function(code, message)
+    viol[[length(viol) + 1]] <<- list(severity = "violation", code = code, message = message)
+
+  fielders <- Filter(function(p) !is.na(.position_category(p$position)), defense_lineup)
+  if (length(fielders) == 0) return(list())  # cannot evaluate without positions
+
+  cat_of <- vapply(fielders, function(p) .position_category(p$position), character(1))
+  is_f <- vapply(fielders, function(p) identical(p$gender, "F"), logical(1))
+  Ftot <- sum(is_f); Mtot <- sum(!is_f)
+  n_of <- sum(is_f & cat_of == "outfield")
+  n_if <- sum(is_f & cat_of == "infield")
+
+  minf <- f$min_females %||% 0L
+  if (Ftot < minf) add("min_females", sprintf("Need at least %d females in the field (have %d).", minf, Ftot))
+  maxm <- f$max_males
+  if (!is.null(maxm) && !is.na(maxm) && Mtot > maxm)
+    add("max_males", sprintf("No more than %d males in the field (have %d).", maxm, Mtot))
+
+  tiers <- f$tiers %||% list()
+  if (length(tiers) > 0) {
+    thr <- vapply(tiers, function(t) as.integer(t$females), integer(1))
+    ord <- order(thr); tiers <- tiers[ord]; thr <- thr[ord]
+    hits <- which(thr <= Ftot)
+    tier <- if (length(hits)) tiers[[max(hits)]] else tiers[[1]]
+    if (n_of < as.integer(tier$outfield))
+      add("outfield_min", sprintf("Need at least %d females in the outfield (have %d).", tier$outfield, n_of))
+    if (n_if < as.integer(tier$infield))
+      add("infield_min", sprintf("Need at least %d females in the infield (have %d).", tier$infield, n_if))
+    if (identical(tier$battery, "one")) {
+      ppos <- Filter(function(p) identical(as.character(p$position), "P"), fielders)
+      cpos <- Filter(function(p) identical(as.character(p$position), "C"), fielders)
+      if (length(ppos) && length(cpos) && identical(ppos[[1]]$gender, cpos[[1]]$gender))
+        add("battery_opposite", "Pitcher and catcher must be opposite genders.")
+    }
+  }
+  viol
 }
 
 apply_run_cap <- function(cfg, runs_this_half, inning) {
