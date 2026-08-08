@@ -8,6 +8,15 @@ start <- new_event("game_start", list(ruleset=default_ruleset_config(), first_ba
   home=list(team_id="H",name="Home",lineup=mk_lineup("h")),
   away=list(team_id="A",name="Away",lineup=mk_lineup("a"))), seq=1L)
 
+test_that("partition_warnings splits violations and notices", {
+  w <- list(
+    list(severity = "violation", code = "min_females", message = "Need 4 F"),
+    list(severity = "notice", code = "run_cap", message = "cap reached"))
+  p <- partition_warnings(w)
+  expect_equal(p$violations, "Need 4 F")
+  expect_equal(p$notices, "cap reached")
+})
+
 test_that("record_outcome_event for 1B puts batter on first with reached=1", {
   s <- fold_events(list(start))
   e <- record_outcome_event(s, "1B", "away")

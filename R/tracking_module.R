@@ -1,5 +1,14 @@
 .OUT_OUTCOMES <- c("K","KL","GO","FO","LO","PO")
 
+partition_warnings <- function(warnings) {
+  warnings <- warnings %||% list()
+  msg <- function(sev) unlist(lapply(warnings,
+    function(x) if (identical(x$severity, sev)) x$message else NULL), use.names = FALSE) %||% character()
+  list(violations = msg("violation"), notices = msg("notice"))
+}
+.violation_codes <- function(warnings) sort(unlist(lapply(warnings,
+  function(x) if (identical(x$severity, "violation")) x$code else NULL), use.names = FALSE) %||% character())
+
 record_half_runs_event <- function(state, runs) {
   new_event("half_runs", list(team = state$batting_team, runs = as.integer(runs %||% 0L)))
 }
@@ -46,6 +55,26 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
       events(storage$load_events(game_id))
     })
     state <- reactive(fold_events(events()))
+
+    shown_violation_sig <- reactiveVal("")
+    shown_notice_codes <- reactiveVal(character())
+    observeEvent(state()$warnings, {
+      w <- state()$warnings
+      p <- partition_warnings(w)
+      sig <- paste(.violation_codes(w), collapse = "|")
+      if (length(p$violations) && !identical(sig, shown_violation_sig())) {
+        showModal(modalDialog(title = "Rule violation",
+          tags$ul(!!!lapply(p$violations, tags$li)),
+          easyClose = TRUE, footer = modalButton("Got it")))
+      }
+      shown_violation_sig(sig)
+      new_notice_codes <- setdiff(
+        vapply(Filter(function(x) identical(x$severity,"notice"), w), function(x) x$code, character(1)),
+        shown_notice_codes())
+      for (m in p$notices) showNotification(m, type = "message", duration = 4)
+      shown_notice_codes(union(shown_notice_codes(),
+        vapply(Filter(function(x) identical(x$severity,"notice"), w), function(x) x$code, character(1))))
+    }, ignoreInit = FALSE)
 
     record <- function(outcome) {
       s <- isolate(state())
