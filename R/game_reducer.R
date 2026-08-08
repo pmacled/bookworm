@@ -221,7 +221,7 @@ suggest_advances <- function(state, outcome) {
   push <- function(id, from, to, scored = FALSE)
     adv[[length(adv) + 1]] <<- make_advance(id, from, to, scored = scored)
 
-  bump <- switch(outcome, "1B" = 1L, "2B" = 2L, "3B" = 3L, "HR" = 4L,
+  bump <- switch(outcome, "1B" = 1L, "2B" = 2L, "3B" = 3L, "HR" = 4L, "ITPHR" = 4L,
                  "BB" = 1L, "IBB" = 1L, "HBP" = 1L, 0L)
   if (bump == 0L) return(adv)  # outs: no automatic advance suggestion
 

@@ -43,6 +43,18 @@ test_that("suggest_advances forces the batter to first on a walk", {
   expect_true(any(vapply(adv, function(a) a$to == 1L, logical(1))))
 })
 
+test_that("suggest_advances scores everyone on an inside-the-park home run, same as HR", {
+  # ITPHR must bump runners 4 bases like HR. A reducer that doesn't recognize
+  # the code falls through the switch's default of 0L and returns no advances
+  # at all (as if nothing happened), which this distinguishes from the fix.
+  s <- fold_events(list(start_evt(), pa("a1", "1B", 1L)))
+  adv <- suggest_advances(s, "ITPHR")
+  runner <- Filter(function(a) a$runner_id == "a1", adv)
+  expect_equal(length(runner), 1L)
+  expect_equal(runner[[1]]$to, 4L)
+  expect_true(runner[[1]]$scored)
+})
+
 test_that("at the shipping default, a cap-crossing play ends the half mid-inning (cap_ends_half)", {
   rs <- coerce_ruleset_config(list(run_cap = list(per_inning = 3L)))
   expect_true(rs$run_cap$cap_ends_half)   # shipping default
