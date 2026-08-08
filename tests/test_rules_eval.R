@@ -163,6 +163,15 @@ test_that("any satisfied mercy tier ends the game", {
   expect_false(game_should_end(cfg, st_at(cfg, 5L, 12L, 3L)))   # 9 after 5: not yet
 })
 
+test_that("a mercy tier fires when the differential is exactly at the threshold", {
+  # Regression: every "true" case above uses a differential strictly greater
+  # than the tier's threshold (22 vs 20, 16 vs 15, 11 vs 10), so none of them
+  # would catch `diff >= diff_needed` degrading to `diff > diff_needed`. This
+  # exercises the boundary directly: diff is exactly 20 against the 20-after-3 tier.
+  cfg <- usa_mercy()
+  expect_true(game_should_end(cfg, st_at(cfg, 3L, 23L, 3L)))   # 20 after 3: exactly at threshold
+})
+
 test_that("mercy works in either direction", {
   cfg <- usa_mercy()
   expect_true(game_should_end(cfg, st_at(cfg, 5L, 3L, 14L)))
