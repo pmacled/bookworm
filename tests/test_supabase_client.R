@@ -16,8 +16,10 @@ test_that("gotrue parser reports errors", {
   expect_match(parsed$error, "bad creds")
 })
 
-test_that("a connectivity failure returns an error result instead of throwing", {
-  # SUPABASE_URL unset => the request targets "/auth/v1/token?..." with no host.
+test_that("an unconfigured deployment (empty SUPABASE_URL) returns an error result without attempting a request", {
+  # This exercises the early "not configured" guard in .gotrue_request, not the
+  # tryCatch around req_perform() — the guard short-circuits before any request is
+  # built, so no network call (successful or failing) ever happens here.
   withr_vars <- c(SUPABASE_URL = "", SUPABASE_ANON_KEY = "")
   old <- Sys.getenv(names(withr_vars), unset = NA)
   do.call(Sys.setenv, as.list(withr_vars))
@@ -27,8 +29,27 @@ test_that("a connectivity failure returns an error result instead of throwing", 
 
   res <- gotrue_sign_in("nobody@example.com", "hunter2")
   expect_false(res$ok)
-  expect_true(nzchar(res$error))
+  expect_equal(res$error, "Saving is not configured on this deployment.")
   expect_true(is.na(res$user_id))
+})
+
+test_that("a transport failure from the performing step returns an error result instead of throwing", {
+  # SUPABASE_URL must be non-empty here so the "not configured" guard doesn't
+  # short-circuit before the injected performer runs — this test's whole point is to
+  # reach the tryCatch around the request-performing step with a stub that throws,
+  # simulating a DNS failure / refused connection / TLS error without any real network
+  # access.
+  old <- Sys.getenv("SUPABASE_URL", unset = NA)
+  Sys.setenv(SUPABASE_URL = "https://example.invalid")
+  on.exit(if (is.na(old)) Sys.unsetenv("SUPABASE_URL") else Sys.setenv(SUPABASE_URL = old),
+          add = TRUE)
+
+  boom <- function(req) stop("simulated transport failure")
+  res <- gotrue_sign_in("nobody@example.com", "hunter2", perform = boom)
+  expect_false(res$ok)
+  expect_equal(res$error, "Could not reach the sign-in service.")
+  expect_true(is.na(res$user_id))
+  expect_true(is.na(res$access_token))
 })
 
 test_that("friendly_auth_error rewrites known GoTrue messages", {

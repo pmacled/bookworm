@@ -44,22 +44,26 @@ friendly_auth_error <- function(msg) {
   .auth_error(msg)
 }
 
-.gotrue_request <- function(path, email, password) {
+.gotrue_request <- function(path, email, password, perform = httr2::req_perform) {
   base <- Sys.getenv("SUPABASE_URL")
   if (!nzchar(base))
     return(.auth_error("Saving is not configured on this deployment."))
   # req_error(is_error = FALSE) suppresses HTTP *status* errors but not transport
   # errors (DNS, refused connection, TLS), which is why the whole call is wrapped.
+  # `perform` is injectable so tests can exercise this tryCatch with a stub that
+  # throws, instead of relying on a real network failure to reach it.
   tryCatch({
     resp <- httr2::request(paste0(base, "/auth/v1/", path)) |>
       httr2::req_headers(apikey = Sys.getenv("SUPABASE_ANON_KEY"),
                          "Content-Type" = "application/json") |>
       httr2::req_body_json(list(email = email, password = password)) |>
       httr2::req_error(is_error = function(r) FALSE) |>
-      httr2::req_perform()
+      perform()
     .gotrue_parse(httr2::resp_body_json(resp))
   }, error = function(e) .auth_error("Could not reach the sign-in service."))
 }
 
-gotrue_sign_in <- function(email, password) .gotrue_request("token?grant_type=password", email, password)
-gotrue_sign_up <- function(email, password) .gotrue_request("signup", email, password)
+gotrue_sign_in <- function(email, password, perform = httr2::req_perform)
+  .gotrue_request("token?grant_type=password", email, password, perform)
+gotrue_sign_up <- function(email, password, perform = httr2::req_perform)
+  .gotrue_request("signup", email, password, perform)
