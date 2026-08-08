@@ -284,8 +284,11 @@ STANDARD_COED_FIELDING <- list(
 
 .position_category <- function(pos) {
   if (is.null(pos) || length(pos) != 1 || is.na(pos)) return(NA_character_)
-  cat <- APP_CONFIG$POSITION_CATEGORY[[as.character(pos)]]
-  if (is.null(cat)) NA_character_ else cat
+  key <- as.character(pos)
+  # POSITION_CATEGORY is a named CHARACTER VECTOR: `[[missing]]` throws
+  # "subscript out of bounds", so gate on membership first.
+  if (!key %in% names(APP_CONFIG$POSITION_CATEGORY)) return(NA_character_)
+  unname(APP_CONFIG$POSITION_CATEGORY[[key]])
 }
 
 evaluate_fielding <- function(cfg, defense_lineup) {
@@ -1049,12 +1052,12 @@ partition_warnings <- function(warnings) {
           easyClose = TRUE, footer = modalButton("Got it")))
       }
       shown_violation_sig(sig)
-      new_notice_codes <- setdiff(
-        vapply(Filter(function(x) identical(x$severity,"notice"), w), function(x) x$code, character(1)),
-        shown_notice_codes())
-      for (m in p$notices) showNotification(m, type = "message", duration = 4)
-      shown_notice_codes(union(shown_notice_codes(),
-        vapply(Filter(function(x) identical(x$severity,"notice"), w), function(x) x$code, character(1))))
+      notice_items <- Filter(function(x) identical(x$severity, "notice"), w)
+      notice_codes <- vapply(notice_items, function(x) x$code, character(1))
+      new_codes <- setdiff(notice_codes, shown_notice_codes())
+      for (it in notice_items) if (it$code %in% new_codes)
+        showNotification(it$message, type = "message", duration = 4)
+      shown_notice_codes(notice_codes)  # track current set; a notice re-toasts only if it clears then recurs
     }, ignoreInit = FALSE)
 ```
 

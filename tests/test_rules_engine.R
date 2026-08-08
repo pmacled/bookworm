@@ -29,3 +29,16 @@ test_that("validation rejects bad starting count and unknown enums", {
   bad3$batting_gender_rule$n <- NA_integer_   # every_n requires n
   expect_false(validate_ruleset_config(bad3)$ok)
 })
+
+test_that("foul_out_rule accepts unlimited", {
+  cfg <- default_ruleset_config(); cfg$foul_out_rule <- "unlimited"
+  expect_true(validate_ruleset_config(cfg)$ok)
+})
+
+test_that("batting_size defaults to unlimited (NA) and validates", {
+  expect_true(is.na(default_ruleset_config()$batting_size))
+  expect_equal(coerce_ruleset_config(list(batting_size = 10))$batting_size, 10L)
+  expect_equal(coerce_ruleset_config(list(batting_size = 0))$batting_size, NA_integer_)  # 0 => unlimited
+  bad <- default_ruleset_config(); bad$batting_size <- -3L
+  expect_false(validate_ruleset_config(bad)$ok)
+})
