@@ -10,7 +10,8 @@ initial_game_state <- function(ruleset = default_ruleset_config()) {
     batting_index = list(home = 0L, away = 0L),
     batting_team = "away", current_batter = NULL,
     pa_log = list(), line_score = list(home = integer(), away = integer()),
-    warnings = list(), ruleset = ruleset, cap_hit_last_play = FALSE
+    warnings = list(), ruleset = ruleset, cap_hit_last_play = FALSE,
+    pinch_runner_log = list()
   )
 }
 
@@ -271,6 +272,9 @@ apply_substitution <- function(state, evt) {
     for (b in c("first","second","third"))
       if (!is.na(state$bases[[b]]) && state$bases[[b]] == p$out_player_id)
         state$bases[[b]] <- p$in_player$player_id
+    state$pinch_runner_log <- c(state$pinch_runner_log %||% list(), list(list(
+      inning = state$inning, half = state$half, team = p$team %||% state$batting_team,
+      out_player_id = p$out_player_id, in_player_id = p$in_player$player_id)))
   }
   state
 }
