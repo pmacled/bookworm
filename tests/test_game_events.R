@@ -34,3 +34,10 @@ test_that("POSITION_CATEGORY groups positions", {
   expect_equal(APP_CONFIG$POSITION_CATEGORY[["ROVER"]], "outfield")
   expect_true(is.na(APP_CONFIG$POSITION_CATEGORY["DH"]))
 })
+
+test_that("half_runs event validates team and runs", {
+  ok <- new_event("half_runs", list(team = "home", runs = 3L))
+  expect_true(validate_event(ok)$ok)
+  expect_false(validate_event(new_event("half_runs", list(team = "nobody", runs = 1L)))$ok)
+  expect_false(validate_event(new_event("half_runs", list(team = "home", runs = -1L)))$ok)
+})

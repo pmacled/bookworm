@@ -1,5 +1,5 @@
 EVENT_TYPES <- c("game_start", "plate_appearance", "substitution",
-                 "count_override", "inning_end")
+                 "count_override", "inning_end", "half_runs")
 
 new_event <- function(type, payload, seq = NA_integer_, ts = NA_character_) {
   list(seq = as.integer(seq), type = type, ts = ts, payload = payload %||% list())
@@ -30,6 +30,11 @@ validate_event <- function(evt) {
   }
   if (identical(evt$type, "substitution")) {
     if (!evt$payload$kind %in% c("batting", "defensive", "courtesy_runner")) add("bad sub kind")
+  }
+  if (identical(evt$type, "half_runs")) {
+    if (!isTRUE(evt$payload$team %in% c("home", "away"))) add("half_runs needs team home/away")
+    r <- evt$payload$runs
+    if (is.null(r) || !is.numeric(r) || r < 0) add("half_runs needs non-negative runs")
   }
   list(ok = length(errors) == 0, errors = errors)
 }
