@@ -6,7 +6,9 @@ storage_for_identity <- function(identity,
          degraded = degraded, reason = reason)
 
   if (!identical(identity$mode, "user")) return(guest())
-  if (!configured())
+
+  configured_ok <- tryCatch(isTRUE(configured()), error = function(e) FALSE)
+  if (!configured_ok)
     return(guest(TRUE, "Saving is not configured on this deployment."))
 
   con <- tryCatch(connect(), error = function(e) e)

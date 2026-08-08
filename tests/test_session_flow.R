@@ -44,3 +44,13 @@ test_that("a working database connection is used and is not degraded", {
   expect_identical(sf$con, fake_con)
   expect_false(sf$degraded)
 })
+
+test_that("a throwing configured() falls back to guest storage instead of propagating", {
+  sf <- storage_for_identity(
+    list(mode = "user", user_id = "u1"),
+    configured = function() stop("boom"))
+  expect_true(is.function(sf$storage$append_event))
+  expect_null(sf$con)
+  expect_true(sf$degraded)
+  expect_true(nzchar(sf$reason))
+})
