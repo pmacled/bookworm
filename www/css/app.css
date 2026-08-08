@@ -1,4 +1,21 @@
 :root { --tap: 3rem; }
+
+/* Lineup editor: a real table whose cells hold Shiny inputs. */
+.bw-lineup-wrap { overflow-x: auto; }
+.bw-lineup { margin-bottom: .5rem; }
+.bw-lineup thead th { position: sticky; top: 0; z-index: 2;
+  background: var(--bs-light); font-size: .8rem; text-transform: uppercase;
+  letter-spacing: .03em; }
+.bw-lineup td.bw-cell { padding: .15rem .25rem; vertical-align: middle; }
+.bw-lineup td.bw-order { width: 2rem; text-align: right; padding-right: .5rem;
+  color: var(--bs-secondary); font-variant-numeric: tabular-nums; }
+/* Inputs inside cells must not carry Bootstrap's block margin, or the rows
+   stop reading as table rows. */
+.bw-lineup .form-group, .bw-lineup .shiny-input-container { margin-bottom: 0; width: auto; }
+.bw-lineup .shiny-input-container:not(.shiny-input-container-inline) { width: auto; }
+/* Keep the name column readable when the table scrolls horizontally. */
+.bw-lineup td:nth-child(2) { min-width: 9rem; }
+@media (max-width: 576px) { .bw-lineup { font-size: .9rem; } }
 .bw-outcome-btn { min-height: var(--tap); font-size: 1.1rem; font-weight: 600; }
 .bw-scorebook { overflow-x: auto; }
 @media (max-width: 576px) { .bw-outcome-grid { gap: .4rem; } }

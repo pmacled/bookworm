@@ -6,20 +6,25 @@ build_game_start_event <- function(ruleset, home, away, first_bat = "away") {
     home = home, away = away), seq = 1L)
 }
 
-collect_lineup <- function(input, prefix, row_ids) {
+.parse_jersey <- function(x) {
+  if (is.null(x) || length(x) != 1) return(NA_integer_)
+  x <- trimws(as.character(x))
+  if (!nzchar(x) || is.na(x) || !grepl("^[0-9]+$", x)) return(NA_integer_)
+  as.integer(x)
+}
+
+collect_lineup <- function(input, prefix, row_ids, show_gender = TRUE) {
   players <- list()
   for (id in row_ids) {
-    nm <- input[[paste0(prefix, "_name_", id)]] %||% ""
-    nm <- trimws(nm)
+    nm <- trimws(input[[paste0(prefix, "_name_", id)]] %||% "")
     if (!nzchar(nm)) next
-    jersey <- input[[paste0(prefix, "_jersey_", id)]]
-    jersey <- if (is.null(jersey) || is.na(jersey)) 0L else as.integer(jersey)
     pos <- input[[paste0(prefix, "_pos_", id)]] %||% ""
     pos <- if (!nzchar(pos)) NA_character_ else pos
+    gender <- if (show_gender) (input[[paste0(prefix, "_gender_", id)]] %||% "M") else "M"
     slot <- length(players) + 1L
-    players[[slot]] <- make_player(uuid::UUIDgenerate(), nm,
-      input[[paste0(prefix, "_gender_", id)]] %||% "M",
-      jersey_number = jersey, order_slot = slot, position = pos)
+    players[[slot]] <- make_player(uuid::UUIDgenerate(), nm, gender,
+      jersey_number = .parse_jersey(input[[paste0(prefix, "_jersey_", id)]]),
+      order_slot = slot, position = pos)
   }
   players
 }
@@ -47,25 +52,39 @@ collect_ruleset <- function(input) {
       list(list(after_inning = 1L, differential = input$mercy_diff)) else list())))
 }
 
-.lineup_ui <- function(ns, prefix, title) {
+.POS_CHOICES <- function()
+  c("(pos)" = "", stats::setNames(APP_CONFIG$positions, APP_CONFIG$positions))
+
+.lineup_table_head <- function(show_gender) {
+  cols <- c("#", "Name", if (show_gender) "Gender", "Jersey", "Position", "")
+  tags$thead(tags$tr(!!!lapply(cols, function(h) tags$th(scope = "col", h))))
+}
+
+.lineup_ui <- function(ns, prefix, title, show_gender = TRUE) {
   tagList(
     tags$h5(title),
     tags$p(class = "text-muted small",
       "Leave this lineup empty to just record this team's runs each inning."),
-    tags$div(id = ns(paste0(prefix, "_rows"))),
-    actionButton(ns(paste0(prefix, "_add")), "Add player", class = "btn-sm btn-outline-secondary")
-  )
+    tags$div(class = "bw-lineup-wrap",
+      tags$table(class = "table table-sm bw-lineup",
+        .lineup_table_head(show_gender),
+        tags$tbody(id = ns(paste0(prefix, "_rows"))))),
+    div(class = "d-flex gap-2",
+      actionButton(ns(paste0(prefix, "_add")), "Add player",
+                   class = "btn-sm btn-outline-secondary"),
+      actionButton(ns(paste0(prefix, "_save")), "Save lineup",
+                   class = "btn-sm btn-primary")),
+    uiOutput(ns(paste0(prefix, "_validation"))))
 }
 
 setup_ui <- function(id) {
   ns <- NS(id)
-  pos_choices <- c("(no position)" = "", stats::setNames(APP_CONFIG$positions, APP_CONFIG$positions))
   tagList(
     tags$h3("New game"),
     textInput(ns("away_name"), "Away team", "Away"),
-    .lineup_ui(ns, "away", "Away lineup"),
+    .lineup_ui(ns, "away", "Away lineup", show_gender = TRUE),
     textInput(ns("home_name"), "Home team", "Home"),
-    .lineup_ui(ns, "home", "Home lineup"),
+    .lineup_ui(ns, "home", "Home lineup", show_gender = TRUE),
     accordion(open = FALSE,
       accordion_panel("Rules",
         layout_columns(col_widths = c(6,6),
@@ -102,14 +121,21 @@ setup_ui <- function(id) {
   )
 }
 
-.player_row <- function(ns, prefix, id) {
-  pos_choices <- c("(pos)" = "", stats::setNames(APP_CONFIG$positions, APP_CONFIG$positions))
-  tags$div(class = "d-flex gap-1 align-items-end mb-1", id = ns(paste0(prefix, "_row_", id)),
-    textInput(ns(paste0(prefix, "_name_", id)), NULL, placeholder = "Name"),
-    radioButtons(ns(paste0(prefix, "_gender_", id)), NULL, c("M","F"), inline = TRUE),
-    numericInput(ns(paste0(prefix, "_jersey_", id)), NULL, value = NA, min = 0, max = 99),
-    selectInput(ns(paste0(prefix, "_pos_", id)), NULL, pos_choices),
-    actionButton(ns(paste0(prefix, "_del_", id)), "×", class = "btn-sm btn-outline-danger"))
+.player_row <- function(ns, prefix, id, order, show_gender) {
+  cell <- function(...) tags$td(class = "bw-cell", ...)
+  tags$tr(id = ns(paste0(prefix, "_row_", id)),
+    tags$td(class = "bw-order", order),
+    cell(textInput(ns(paste0(prefix, "_name_", id)), NULL, placeholder = "Name")),
+    if (show_gender)
+      cell(selectInput(ns(paste0(prefix, "_gender_", id)), NULL,
+                       c("M" = "M", "F" = "F"), width = "5rem")),
+    cell(tagAppendAttributes(
+      textInput(ns(paste0(prefix, "_jersey_", id)), NULL, placeholder = "#", width = "5rem"),
+      inputmode = "numeric", .cssSelector = "input")),
+    cell(selectInput(ns(paste0(prefix, "_pos_", id)), NULL, .POS_CHOICES(),
+                     width = "7rem")),
+    cell(actionButton(ns(paste0(prefix, "_del_", id)), "×",
+                      class = "btn-sm btn-outline-danger")))
 }
 
 setup_server <- function(id) {
@@ -123,7 +149,7 @@ setup_server <- function(id) {
       counter(counter() + 1L); id <- counter()
       rows[[prefix]](c(rows[[prefix]](), id))
       insertUI(sprintf("#%s", ns(paste0(prefix, "_rows"))), where = "beforeEnd",
-        ui = .player_row(ns, prefix, id))
+        ui = .player_row(ns, prefix, id, order = length(rows[[prefix]]()), show_gender = TRUE))
       observeEvent(input[[paste0(prefix, "_del_", id)]], {
         removeUI(sprintf("#%s", ns(paste0(prefix, "_row_", id))))
         rows[[prefix]](setdiff(rows[[prefix]](), id))

@@ -1,4 +1,5 @@
 library(testthat)
+library(shiny)
 for (f in c("app_config.R","rules_engine.R","game_events.R","setup_module.R"))
   source(file.path("R", f))
 
@@ -17,14 +18,62 @@ test_that("collect_lineup reads rows, skips blanks, assigns order_slot", {
   input <- list(
     t_name_1 = "Sam", t_gender_1 = "F", t_jersey_1 = 9, t_pos_1 = "SS",
     t_name_2 = "",    t_gender_2 = "M", t_jersey_2 = NA, t_pos_2 = "",   # blank name -> skipped
-    t_name_3 = "Mo",  t_gender_3 = "M", t_jersey_3 = NA, t_pos_3 = ""    # blank jersey -> 0
+    t_name_3 = "Mo",  t_gender_3 = "M", t_jersey_3 = NA, t_pos_3 = ""    # blank jersey -> NA
   )
   lu <- collect_lineup(input, "t", c(1,2,3))
   expect_equal(length(lu), 2L)
   expect_equal(lu[[1]]$name, "Sam"); expect_equal(lu[[1]]$order_slot, 1L)
   expect_equal(lu[[1]]$position, "SS"); expect_equal(lu[[1]]$jersey_number, 9L)
   expect_equal(lu[[2]]$name, "Mo"); expect_equal(lu[[2]]$order_slot, 2L)
-  expect_equal(lu[[2]]$jersey_number, 0L); expect_true(is.na(lu[[2]]$position))
+  expect_true(is.na(lu[[2]]$jersey_number)); expect_true(is.na(lu[[2]]$position))
+})
+
+test_that("a non-numeric jersey becomes NA without a warning", {
+  input <- list(t_name_1 = "Sam", t_gender_1 = "F", t_jersey_1 = "oops", t_pos_1 = "")
+  expect_silent(lu <- collect_lineup(input, "t", 1))
+  expect_true(is.na(lu[[1]]$jersey_number))
+})
+
+test_that("a jersey entered as a digit string is read as a number", {
+  input <- list(t_name_1 = "Sam", t_gender_1 = "F", t_jersey_1 = "07", t_pos_1 = "")
+  lu <- collect_lineup(input, "t", 1)
+  expect_equal(lu[[1]]$jersey_number, 7L)
+})
+
+test_that("collect_lineup defaults gender when the column is not rendered", {
+  input <- list(t_name_1 = "Sam", t_jersey_1 = "9", t_pos_1 = "SS")   # no t_gender_1
+  lu <- collect_lineup(input, "t", 1, show_gender = FALSE)
+  expect_equal(lu[[1]]$name, "Sam")
+  expect_equal(lu[[1]]$gender, "M")
+})
+
+test_that("the lineup table renders a real table with the expected headers", {
+  ns <- shiny::NS("setup")
+  html <- as.character(.lineup_table_head(show_gender = TRUE))
+  for (h in c("#", "Name", "Gender", "Jersey", "Position"))
+    expect_true(grepl(paste0(">", h, "<"), html, fixed = TRUE), info = h)
+})
+
+test_that("the gender column disappears for a genderless ruleset", {
+  html <- as.character(.lineup_table_head(show_gender = FALSE))
+  expect_false(grepl(">Gender<", html, fixed = TRUE))
+  expect_true(grepl(">Name<", html, fixed = TRUE))
+})
+
+test_that("a player row is a tr with cells and keeps its input ids", {
+  ns <- shiny::NS("setup")
+  html <- as.character(.player_row(ns, "away", 3L, order = 2L, show_gender = TRUE))
+  expect_true(grepl("^<tr", html))
+  expect_true(grepl('id="setup-away_name_3"', html, fixed = TRUE))
+  expect_true(grepl('id="setup-away_pos_3"', html, fixed = TRUE))
+  expect_true(grepl('id="setup-away_gender_3"', html, fixed = TRUE))
+})
+
+test_that("a genderless player row omits the gender input entirely", {
+  ns <- shiny::NS("setup")
+  html <- as.character(.player_row(ns, "away", 3L, order = 1L, show_gender = FALSE))
+  expect_false(grepl("away_gender_3", html, fixed = TRUE))
+  expect_true(grepl('id="setup-away_name_3"', html, fixed = TRUE))
 })
 
 test_that("collect_lineup returns an empty list when no rows have names", {
