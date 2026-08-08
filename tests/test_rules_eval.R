@@ -9,9 +9,11 @@ test_that("no_two_males_consecutive flags a male after a male", {
 })
 
 test_that("run cap limits non-open innings", {
-  cfg <- coerce_ruleset_config(list(run_cap_per_inning = 5L, innings = 7L, open_last_inning = TRUE))
-  expect_equal(apply_run_cap(cfg, runs_this_half = 8L, inning = 3L), 5L)
-  expect_equal(apply_run_cap(cfg, runs_this_half = 8L, inning = 7L), 8L)  # open last
+  cfg <- coerce_ruleset_config(list(run_cap_per_inning = 5L, innings = 7L,
+                                    open_last_inning = TRUE))
+  cfg$run_cap$same_play_runs_count <- FALSE   # legacy clamping behaviour
+  expect_equal(apply_run_cap(cfg, runs_before = 0L, runs_on_play = 8L, inning = 3L)$runs, 5L)
+  expect_equal(apply_run_cap(cfg, runs_before = 0L, runs_on_play = 8L, inning = 7L)$runs, 8L)
 })
 
 test_that("mercy ends the game", {

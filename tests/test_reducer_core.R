@@ -15,7 +15,7 @@ start_evt <- function() new_event("game_start", list(
 test_that("game_start seeds count, batting team, current batter", {
   s <- fold_events(list(start_evt()))
   expect_equal(s$batting_team, "away")
-  expect_equal(s$count$balls, 1L)
+  expect_equal(s$count$balls, 0L)
   expect_equal(s$current_batter$player_id, "a1")
   expect_equal(s$outs, 0L)
 })
@@ -29,7 +29,7 @@ test_that("three outs flips to bottom half and resets outs/count", {
   expect_equal(s$half, "bottom")
   expect_equal(s$outs, 0L)
   expect_equal(s$batting_team, "home")
-  expect_equal(s$count$balls, 1L)          # reset to starting count
+  expect_equal(s$count$balls, 0L)          # reset to starting count
   expect_equal(s$current_batter$player_id, "h1")
 })
 

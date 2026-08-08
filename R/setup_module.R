@@ -42,9 +42,9 @@ collect_ruleset <- function(input) {
     batting_size = as.integer(input$batting_size %||% "0"),  # selectInput string; coerce maps 0/NA => unlimited
     fielding = fielding,
     innings = input$innings,
-    run_cap_per_inning = if ((input$run_cap %||% 0) > 0) input$run_cap else NA_integer_,
-    mercy_rule = list(differential = if ((input$mercy_diff %||% 0) > 0) input$mercy_diff else NA_integer_,
-                      after_inning = 1L)))
+    run_cap = list(per_inning = if ((input$run_cap %||% 0) > 0) input$run_cap else NA_integer_),
+    mercy_rule = list(tiers = if ((input$mercy_diff %||% 0) > 0)
+      list(list(after_inning = 1L, differential = input$mercy_diff)) else list())))
 }
 
 .lineup_ui <- function(ns, prefix, title) {

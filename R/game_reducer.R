@@ -10,7 +10,7 @@ initial_game_state <- function(ruleset = default_ruleset_config()) {
     batting_index = list(home = 0L, away = 0L),
     batting_team = "away", current_batter = NULL,
     pa_log = list(), line_score = list(home = integer(), away = integer()),
-    warnings = list(), ruleset = ruleset
+    warnings = list(), ruleset = ruleset, cap_hit_last_play = FALSE
   )
 }
 
@@ -68,11 +68,9 @@ advance_half <- function(state) {
     }
   }
 
-  cap <- cfg$run_cap_per_inning
-  if (!is.na(cap) && !(isTRUE(cfg$open_last_inning) && state$inning >= cfg$innings) &&
-      state$runs_this_half >= cap) {
+  if (isTRUE(state$cap_hit_last_play)) {
     w <- c(w, list(list(severity = "notice", code = "run_cap",
-      message = sprintf("Run cap of %d reached this inning.", cap))))
+      message = sprintf("Run cap of %d reached this inning.", cfg$run_cap$per_inning))))
   }
 
   bs <- cfg$batting_size
@@ -82,6 +80,15 @@ advance_half <- function(state) {
       w <- c(w, list(list(severity = "notice", code = "batting_size",
         message = sprintf("Batting team has %d batters; rule expects %d.", n_bat, bs))))
     }
+  }
+
+  fc <- cfg$fielding$fielder_count
+  if (!is.na(fc)) {
+    n_field <- length(Filter(function(p) !is.na(.position_category(p$position)),
+                             state$lineups[[def_team]]))
+    if (n_field > 0L && n_field != fc)
+      w <- c(w, list(list(severity = "notice", code = "fielder_count",
+        message = sprintf("%d fielders have positions; rule expects %d.", n_field, fc))))
   }
 
   if (game_should_end(cfg, state)) {
@@ -95,6 +102,7 @@ advance_half <- function(state) {
 
 apply_event <- function(state, evt) {
   type <- evt$type
+  if (type != "game_start") state$cap_hit_last_play <- FALSE
   if (type == "game_start") {
     p <- evt$payload
     state <- initial_game_state(p$ruleset %||% state$ruleset)
@@ -103,7 +111,7 @@ apply_event <- function(state, evt) {
     state$teams <- list(home = p$home[c("team_id","name")], away = p$away[c("team_id","name")])
     state$batting_team <- p$first_bat %||% "away"
     state <- .set_current_batter(state)
-    return(state)
+    return(.refresh_flags(state))
   }
   if (type == "count_override") {
     state$count <- list(balls = as.integer(evt$payload$balls),
@@ -119,25 +127,12 @@ apply_event <- function(state, evt) {
   if (type == "half_runs") {
     team <- state$batting_team
     runs <- as.integer(evt$payload$runs %||% 0L)
-    capped <- apply_run_cap(state$ruleset, state$runs_this_half + runs, state$inning) - state$runs_this_half
-    runs <- max(0L, capped)
-    state$score[[team]] <- state$score[[team]] + runs
-    state$runs_this_half <- state$runs_this_half + runs
-    # advance_half resets runs_this_half, so .refresh_flags can't see the cap was
-    # hit this half. Evaluate the run-cap notice here (same condition .refresh_flags
-    # uses) and re-append it after the refresh so run-only halves surface the toast.
-    cfg <- state$ruleset
-    cap <- cfg$run_cap_per_inning
-    cap_hit <- !is.na(cap) &&
-      !(isTRUE(cfg$open_last_inning) && state$inning >= cfg$innings) &&
-      state$runs_this_half >= cap
-    state <- .refresh_flags(advance_half(state))
-    if (cap_hit) {
-      state$warnings <- c(state$warnings, list(list(
-        severity = "notice", code = "run_cap",
-        message = sprintf("Run cap of %d reached this inning.", cap))))
-    }
-    return(state)
+    cr <- apply_run_cap(state$ruleset, state$runs_this_half, runs, state$inning)
+    state$score[[team]] <- state$score[[team]] + cr$runs
+    state$runs_this_half <- state$runs_this_half + cr$runs
+    state <- advance_half(state)
+    state$cap_hit_last_play <- cr$cap_hit   # set AFTER advance_half so the notice survives
+    return(.refresh_flags(state))
   }
   if (type == "substitution") return(.refresh_flags(apply_substitution(state, evt)))  # Task 7
   state
@@ -188,8 +183,9 @@ apply_plate_appearance <- function(state, evt) {
   }
 
   state$bases <- bases
-  capped <- apply_run_cap(state$ruleset, state$runs_this_half + runs, state$inning) - state$runs_this_half
-  runs <- max(0L, capped)
+  cr <- apply_run_cap(state$ruleset, state$runs_this_half, runs, state$inning)
+  runs <- cr$runs
+  state$cap_hit_last_play <- cr$cap_hit
   state$score[[team]] <- state$score[[team]] + runs
   state$runs_this_half <- state$runs_this_half + runs
   state$outs <- state$outs + as.integer(p$outs_on_play %||% 0L)
@@ -204,7 +200,9 @@ apply_plate_appearance <- function(state, evt) {
 
   state$batting_index[[team]] <- state$batting_index[[team]] + 1L
   state <- reset_count(state)
-  if (state$outs >= 3L) state <- advance_half(state) else state <- .set_current_batter(state)
+  cap_ends <- isTRUE(cr$cap_hit) && isTRUE(state$ruleset$run_cap$cap_ends_half)
+  if (state$outs >= 3L || cap_ends) state <- advance_half(state)
+  else state <- .set_current_batter(state)
   state
 }
 

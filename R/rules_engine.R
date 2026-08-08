@@ -1,39 +1,141 @@
 default_ruleset_config <- function() {
   list(
-    starting_count = list(balls = 1L, strikes = 1L),
-    foul_out_rule = "out",
+    preset = "anything_goes",
+    starting_count = list(balls = 0L, strikes = 0L),
+    foul_out_rule = "unlimited",
     batting_gender_rule = list(type = "none", n = NA_integer_),
     male_walk_rule = "none",
-    fielding = list(min_females = 0L, max_males = NA_integer_, tiers = list(),
+    batting_size = NA_integer_,
+    fielding = list(fielder_count = NA_integer_, min_females = 0L,
+                    max_males = NA_integer_, tiers = list(),
                     position_requirements = list()),
     innings = 7L,
-    run_cap_per_inning = NA_integer_,
-    open_last_inning = TRUE,
-    mercy_rule = list(differential = NA_integer_, after_inning = NA_integer_),
-    short_lineup_auto_out = FALSE,
-    courtesy_runner = FALSE,
-    batting_size = NA_integer_
+    run_cap = list(per_inning = NA_integer_, open_last_inning = TRUE,
+                   same_play_runs_count = TRUE, cap_ends_half = TRUE),
+    mercy_rule = list(tiers = list()),
+    home_run_rule = list(over_fence_limit = NA_integer_, limit_by_gender = list(),
+                         over_limit_result = "out", inside_park_counts = FALSE),
+    pinch_runner = list(max_per_inning = NA_integer_, max_per_game = NA_integer_,
+                        max_per_player_per_game = NA_integer_,
+                        eligibility = "anyone", allowed_for = "anyone"),
+    short_lineup_auto_out = FALSE
   )
 }
 
 .as_int_or_na <- function(x) if (is.null(x) || length(x) == 0 || is.na(x)) NA_integer_ else as.integer(x)
 
+# Like utils::modifyList(), but array-valued fields (unnamed lists of records —
+# mercy_rule$tiers, fielding$tiers) are replaced wholesale rather than
+# recursed into. utils::modifyList() recurses whenever both sides are lists,
+# and an unnamed list has no names() to iterate, so its recursive call is a
+# silent no-op: a config's tiers would vanish, replaced by the (usually empty)
+# default. Named sub-lists (starting_count, run_cap, ...) still merge key-by-key.
+.merge_ruleset <- function(x, val) {
+  if (!is.list(val)) return(val)
+  vnames <- names(val)
+  vnames <- if (is.null(vnames)) character() else vnames[nzchar(vnames)]
+  if (length(vnames) == 0L) return(val)  # array: replace wholesale
+  if (!is.list(x)) x <- list()
+  for (v in vnames) {
+    x[[v]] <- if (v %in% names(x) && is.list(x[[v]]) && is.list(val[[v]]))
+      .merge_ruleset(x[[v]], val[[v]])
+    else val[[v]]
+  }
+  x
+}
+
+.BATTING_GENDER_ALIASES <- list(
+  no_two_males_consecutive = list(type = "max_consecutive_males",       n = 1L),
+  every_other              = list(type = "max_consecutive_same_gender", n = 1L),
+  every_n                  = list(type = "min_females_per_n",           n = NA_integer_)
+)
+
+# Rewrites pre-slice-2 ruleset shapes in place. Idempotent: a config that is already
+# in the new shape passes through untouched. Games persisted before slice 2 embed their
+# ruleset in the game_start event and re-coerce on every load, so this must never lose data.
+.migrate_ruleset_config <- function(cfg) {
+  # run_cap: scalar top-level keys -> nested block
+  if (!is.null(cfg$run_cap_per_inning) || !is.null(cfg$open_last_inning)) {
+    # `cfg[["run_cap", exact = TRUE]]`, not `cfg$run_cap`: with `run_cap_per_inning`
+    # still present and no exact `run_cap` key, `$`'s partial-name matching would
+    # silently resolve to the scalar legacy field instead of NULL.
+    rc <- cfg[["run_cap", exact = TRUE]] %||% list()
+    if (is.null(rc$per_inning) && !is.null(cfg$run_cap_per_inning))
+      rc$per_inning <- cfg$run_cap_per_inning
+    if (is.null(rc$open_last_inning) && !is.null(cfg$open_last_inning))
+      rc$open_last_inning <- cfg$open_last_inning
+    cfg$run_cap <- rc
+    cfg$run_cap_per_inning <- NULL
+    cfg$open_last_inning <- NULL
+  }
+
+  # mercy: scalar differential/after_inning -> single-entry tiers list
+  m <- cfg$mercy_rule
+  if (!is.null(m) && !is.null(m$differential)) {
+    d <- m$differential
+    if (length(d) == 1 && !is.na(d)) {
+      after <- m$after_inning
+      after <- if (is.null(after) || length(after) != 1 || is.na(after)) 1L else as.integer(after)
+      cfg$mercy_rule <- list(tiers = list(
+        list(after_inning = after, differential = as.integer(d))))
+    } else {
+      cfg$mercy_rule <- list(tiers = m$tiers %||% list())
+    }
+  }
+
+  # batting gender: renamed types
+  bg <- cfg$batting_gender_rule
+  if (!is.null(bg) && !is.null(bg$type) && bg$type %in% names(.BATTING_GENDER_ALIASES)) {
+    alias <- .BATTING_GENDER_ALIASES[[bg$type]]
+    n <- if (is.na(alias$n)) bg$n else alias$n
+    cfg$batting_gender_rule <- list(type = alias$type, n = n)
+  }
+
+  # courtesy_runner boolean -> pinch_runner block
+  if (!is.null(cfg$courtesy_runner)) {
+    pr <- cfg$pinch_runner %||% list()
+    if (is.null(pr$max_per_game) && identical(cfg$courtesy_runner, FALSE))
+      pr$max_per_game <- 0L
+    cfg$pinch_runner <- pr
+    cfg$courtesy_runner <- NULL
+  }
+  cfg
+}
+
 coerce_ruleset_config <- function(cfg) {
   d <- default_ruleset_config()
-  cfg <- cfg %||% list()
-  d <- utils::modifyList(d, cfg)
-  d$starting_count$balls <- as.integer(d$starting_count$balls)
+  cfg <- .migrate_ruleset_config(cfg %||% list())
+  d <- .merge_ruleset(d, cfg)
+
+  d$starting_count$balls   <- as.integer(d$starting_count$balls)
   d$starting_count$strikes <- as.integer(d$starting_count$strikes)
-  d$innings <- as.integer(d$innings)
-  d$run_cap_per_inning <- .as_int_or_na(d$run_cap_per_inning)
-  d$batting_gender_rule$n <- .as_int_or_na(d$batting_gender_rule$n)
-  d$fielding$min_females <- as.integer(d$fielding$min_females)
-  d$fielding$max_males <- .as_int_or_na(d$fielding$max_males)
-  d$fielding$tiers <- d$fielding$tiers %||% list()
-  d$mercy_rule$differential <- .as_int_or_na(d$mercy_rule$differential)
-  d$mercy_rule$after_inning <- .as_int_or_na(d$mercy_rule$after_inning)
+  d$innings                <- as.integer(d$innings)
+  d$batting_gender_rule$n  <- .as_int_or_na(d$batting_gender_rule$n)
+
   d$batting_size <- .as_int_or_na(d$batting_size)
   if (!is.na(d$batting_size) && d$batting_size < 1L) d$batting_size <- NA_integer_
+
+  d$fielding$fielder_count <- .as_int_or_na(d$fielding$fielder_count)
+  d$fielding$min_females   <- as.integer(d$fielding$min_females)
+  d$fielding$max_males     <- .as_int_or_na(d$fielding$max_males)
+  d$fielding$tiers         <- d$fielding$tiers %||% list()
+
+  d$run_cap$per_inning           <- .as_int_or_na(d$run_cap$per_inning)
+  d$run_cap$open_last_inning     <- isTRUE(d$run_cap$open_last_inning)
+  d$run_cap$same_play_runs_count <- isTRUE(d$run_cap$same_play_runs_count)
+  d$run_cap$cap_ends_half        <- isTRUE(d$run_cap$cap_ends_half)
+
+  d$mercy_rule$tiers <- lapply(d$mercy_rule$tiers %||% list(), function(t)
+    list(after_inning = .as_int_or_na(t$after_inning),
+         differential = .as_int_or_na(t$differential)))
+
+  d$home_run_rule$over_fence_limit <- .as_int_or_na(d$home_run_rule$over_fence_limit)
+  d$home_run_rule$limit_by_gender <-
+    lapply(d$home_run_rule$limit_by_gender %||% list(), .as_int_or_na)
+  d$home_run_rule$inside_park_counts <- isTRUE(d$home_run_rule$inside_park_counts)
+
+  for (k in c("max_per_inning", "max_per_game", "max_per_player_per_game"))
+    d$pinch_runner[[k]] <- .as_int_or_na(d$pinch_runner[[k]])
   d
 }
 
@@ -47,12 +149,15 @@ validate_ruleset_config <- function(cfg) {
   if (!cfg$foul_out_rule %in% c("out", "one_courtesy_foul", "unlimited")) add("invalid foul_out_rule")
 
   bg <- cfg$batting_gender_rule$type
-  if (!bg %in% c("none", "no_two_males_consecutive", "every_other", "every_n")) {
-    add("invalid batting_gender_rule type")
-  }
-  if (identical(bg, "every_n") && is.na(cfg$batting_gender_rule$n)) {
-    add("every_n batting rule requires n")
-  }
+  valid_bg <- c("none", "max_consecutive_males", "max_consecutive_same_gender",
+                "min_females_per_n")
+  if (!bg %in% valid_bg) add("invalid batting_gender_rule type")
+  if (!identical(bg, "none") && is.na(cfg$batting_gender_rule$n))
+    add(sprintf("%s batting rule requires n", bg))
+  if (!identical(bg, "none") && !is.na(cfg$batting_gender_rule$n) &&
+      cfg$batting_gender_rule$n < 1L)
+    add("batting_gender_rule n must be >= 1")
+
   if (!cfg$male_walk_rule %in% c("none", "two_bases_then_female")) add("invalid male_walk_rule")
   if (!is.numeric(cfg$innings) || cfg$innings < 1) add("innings must be >= 1")
 
@@ -60,18 +165,43 @@ validate_ruleset_config <- function(cfg) {
     add("batting_size must be a positive integer or NA (unlimited)")
   }
 
+  for (t in cfg$mercy_rule$tiers) {
+    # %||%, not a bare $: a hand-built tier list (as opposed to one that has
+    # passed through coerce_ruleset_config) may omit a key entirely, and
+    # is.na(NULL) is logical(0) -- `||`ing that in gives NA, not FALSE.
+    ai <- t$after_inning %||% NA_integer_
+    df <- t$differential %||% NA_integer_
+    if (is.na(ai) || is.na(df))
+      add("each mercy tier needs after_inning and differential")
+    else if (ai < 1L || df < 1L)
+      add("mercy tier values must be >= 1")
+  }
+
+  if (!cfg$home_run_rule$over_limit_result %in%
+      c("out", "ground_rule_double", "single")) add("invalid over_limit_result")
+  if (!cfg$pinch_runner$eligibility %in%
+      c("anyone", "same_gender", "last_out", "last_same_gender_out"))
+    add("invalid pinch_runner eligibility")
+  if (!cfg$pinch_runner$allowed_for %in% c("anyone", "pitcher_catcher"))
+    add("invalid pinch_runner allowed_for")
+
   list(ok = length(errors) == 0, errors = errors)
 }
 
 next_batter_gender_ok <- function(cfg, prev_genders, next_gender) {
   rule <- cfg$batting_gender_rule
   type <- rule$type
-  if (type == "none") return(TRUE)
-  last <- if (length(prev_genders)) tail(prev_genders, 1) else NA_character_
-  if (type == "no_two_males_consecutive") return(!(identical(last, "M") && identical(next_gender, "M")))
-  if (type == "every_other") return(is.na(last) || !identical(last, next_gender))
-  if (type == "every_n") {
-    n <- cfg$batting_gender_rule$n
+  if (identical(type, "none")) return(TRUE)
+  n <- rule$n
+  if (identical(type, "max_consecutive_males")) {
+    recent <- tail(c(prev_genders, next_gender), n + 1L)
+    return(!(length(recent) == n + 1L && all(recent == "M")))
+  }
+  if (identical(type, "max_consecutive_same_gender")) {
+    recent <- tail(c(prev_genders, next_gender), n + 1L)
+    return(!(length(recent) == n + 1L && length(unique(recent)) == 1L))
+  }
+  if (identical(type, "min_females_per_n")) {
     recent <- tail(c(prev_genders, next_gender), n)
     return(any(recent == "F"))  # at least one F in every window of n
   }
@@ -139,19 +269,27 @@ evaluate_fielding <- function(cfg, defense_lineup) {
   viol
 }
 
-apply_run_cap <- function(cfg, runs_this_half, inning) {
-  cap <- cfg$run_cap_per_inning
-  if (is.na(cap)) return(as.integer(runs_this_half))
-  if (isTRUE(cfg$open_last_inning) && inning >= cfg$innings) return(as.integer(runs_this_half))
-  as.integer(min(runs_this_half, cap))
+# Returns how many of `runs_on_play` actually count, and whether the cap was reached.
+# same_play_runs_count = TRUE: a play in progress completes fully; the cap stops the
+# *next* batter. FALSE: runs are clamped mid-play at the cap.
+apply_run_cap <- function(cfg, runs_before, runs_on_play, inning) {
+  rc <- cfg$run_cap
+  cap <- rc$per_inning
+  runs_on_play <- as.integer(runs_on_play)
+  if (is.na(cap)) return(list(runs = runs_on_play, cap_hit = FALSE))
+  if (isTRUE(rc$open_last_inning) && inning >= cfg$innings)
+    return(list(runs = runs_on_play, cap_hit = FALSE))
+  total <- as.integer(runs_before) + runs_on_play
+  runs <- if (isTRUE(rc$same_play_runs_count)) runs_on_play
+          else max(0L, cap - as.integer(runs_before))
+  list(runs = as.integer(runs), cap_hit = total >= cap)
 }
 
 game_should_end <- function(cfg, state) {
-  m <- cfg$mercy_rule
-  if (!is.na(m$differential)) {
-    diff <- abs(state$score$home - state$score$away)
-    after <- if (is.na(m$after_inning)) 1L else m$after_inning  # %||% won't catch NA
-    if (state$inning >= after && diff >= m$differential) return(TRUE)
+  diff <- abs(state$score$home - state$score$away)
+  for (t in cfg$mercy_rule$tiers %||% list()) {
+    after <- if (is.na(t$after_inning)) 1L else t$after_inning  # %||% won't catch NA
+    if (!is.na(t$differential) && state$inning >= after && diff >= t$differential) return(TRUE)
   }
   # Regulation complete: finished the bottom of the final inning.
   if (state$inning > cfg$innings) return(TRUE)
