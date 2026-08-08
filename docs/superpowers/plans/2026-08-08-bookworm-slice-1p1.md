@@ -243,10 +243,10 @@ test_that("standard coed: too many males and no outfield female both flag", {
 test_that("tier at 5 females requires 2 outfield + 2 infield", {
   cfg <- fld(STANDARD_COED_FIELDING)
   d <- list(
-    pl("F","P"), pl("M","C"),
+    pl("F","P"), pl("F","C"),                                # battery both F (also flags battery_opposite; unchecked)
     pl("F","SS"), pl("F","1B"), pl("M","2B"), pl("M","3B"),  # infield F=2
     pl("F","LF"), pl("M","LCF"), pl("M","RCF"), pl("M","RF") # outfield F=1  (needs 2 at 5F)
-  )  # F total = 5
+  )  # F total = 5 (P,C,SS,1B,LF)
   cd <- codes(evaluate_fielding(cfg, d))
   expect_true("outfield_min" %in% cd)
   expect_false("infield_min" %in% cd)
@@ -523,13 +523,18 @@ test_that("warnings is a list of structured items and flags batting gender order
 
 test_that("a fielding violation surfaces as a warning item during defense", {
   cfg <- coerce_ruleset_config(list(fielding = STANDARD_COED_FIELDING))
-  # away bats (top); home is the defense. Give home an all-male positioned defense.
+  # away bats (top); home is the defense with an all-male positioned defense.
+  # Fold a plate appearance too: game_start does NOT run .refresh_flags, so a
+  # non-game_start event is needed for warnings to compute.
   home <- mk("h", rep("M", 4), positions = c("P","C","SS","LF"))
   away <- mk("a", c("M","F"))
-  s <- fold_events(list(new_event("game_start", list(ruleset = cfg, first_bat = "away",
-    home = list(team_id="H", name="H", lineup = home),
-    away = list(team_id="A", name="A", lineup = away)), seq = 1L)))
-  expect_true(has_code(s$warnings, "min_females"))  # 0 females on defense
+  s <- fold_events(list(
+    new_event("game_start", list(ruleset = cfg, first_bat = "away",
+      home = list(team_id="H", name="H", lineup = home),
+      away = list(team_id="A", name="A", lineup = away)), seq = 1L),
+    new_event("plate_appearance", list(team="away", batter_id="a1", outcome="1B",
+      reached=1L, rbi=0L, outs_on_play=0L, advances=list()), seq = 2L)))
+  expect_true(has_code(s$warnings, "min_females"))  # 0 females on the home defense
 })
 ```
 
@@ -839,7 +844,6 @@ test_that("setup_server produces a game_start with a run-only home team", {
   library(shiny)
   testServer(setup_server, {
     session$setInputs(away_add = 1)                 # one away row
-    rid <- session$returned  # not used; ensure server initialized
     # Fill the away row (id 1), leave home empty, set required rule inputs, start.
     session$setInputs(away_name_1 = "Sam", away_gender_1 = "F", away_jersey_1 = 9, away_pos_1 = "SS",
       away_name = "Away", home_name = "Home", start_balls = 1, start_strikes = 1,
