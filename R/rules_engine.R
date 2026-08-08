@@ -221,6 +221,7 @@ next_batter_gender_ok <- function(cfg, prev_genders, next_gender) {
   }
   if (identical(type, "min_females_per_n")) {
     recent <- tail(c(prev_genders, next_gender), n)
+    if (length(recent) < n) return(TRUE)  # window not full yet; cannot be violated
     return(any(vapply(recent, is_g, logical(1), "F")))  # at least one F in every window of n
   }
   TRUE

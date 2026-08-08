@@ -25,6 +25,45 @@ test_that("next_batter_gender_ok is NA-safe: an unknown gender never satisfies t
   expect_false(next_batter_gender_ok(cfg2, prev_genders = c(NA_character_), next_gender = NA_character_))
 })
 
+gender_cfg <- function(type, n) coerce_ruleset_config(
+  list(batting_gender_rule = list(type = type, n = n)))
+
+test_that("max_consecutive_males n=1 is the old no-two-males rule", {
+  cfg <- gender_cfg("max_consecutive_males", 1L)
+  expect_false(next_batter_gender_ok(cfg, c("M"), "M"))
+  expect_true(next_batter_gender_ok(cfg, c("M"), "F"))
+  expect_true(next_batter_gender_ok(cfg, c("F"), "M"))
+  expect_true(next_batter_gender_ok(cfg, character(), "M"))   # nothing to violate yet
+})
+
+test_that("max_consecutive_males n=2 allows two males but not three", {
+  cfg <- gender_cfg("max_consecutive_males", 2L)
+  expect_true(next_batter_gender_ok(cfg, c("M"), "M"))
+  expect_false(next_batter_gender_ok(cfg, c("M", "M"), "M"))
+  expect_true(next_batter_gender_ok(cfg, c("F", "M"), "M"))
+  expect_true(next_batter_gender_ok(cfg, c("M", "M"), "F"))
+})
+
+test_that("max_consecutive_same_gender applies to both genders", {
+  cfg <- gender_cfg("max_consecutive_same_gender", 1L)
+  expect_false(next_batter_gender_ok(cfg, c("F"), "F"))
+  expect_false(next_batter_gender_ok(cfg, c("M"), "M"))
+  expect_true(next_batter_gender_ok(cfg, c("M"), "F"))
+})
+
+test_that("min_females_per_n needs one female per window", {
+  cfg <- gender_cfg("min_females_per_n", 3L)
+  expect_false(next_batter_gender_ok(cfg, c("M", "M"), "M"))
+  expect_true(next_batter_gender_ok(cfg, c("M", "F"), "M"))
+  # A window that is not yet full cannot be violated.
+  expect_true(next_batter_gender_ok(cfg, c("M"), "M"))
+})
+
+test_that("type none never fails", {
+  cfg <- gender_cfg("none", NA_integer_)
+  expect_true(next_batter_gender_ok(cfg, c("M", "M", "M"), "M"))
+})
+
 test_that("run cap limits non-open innings", {
   cfg <- coerce_ruleset_config(list(run_cap_per_inning = 5L, innings = 7L,
                                     open_last_inning = TRUE))
