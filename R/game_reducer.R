@@ -210,7 +210,7 @@ apply_substitution <- function(state, evt) {
     lineup <- state$lineups[[team]]
     for (i in seq_along(lineup)) {
       if (identical(lineup[[i]]$player_id, p$out_player_id)) {
-        inp <- p$in_player; inp$position <- if (is.null(p$position)) NA_integer_ else as.integer(p$position)
+        inp <- p$in_player; inp$position <- if (length(p$position) != 1 || is.na(p$position)) NA_character_ else as.character(p$position)
         lineup[[i]] <- inp
       }
     }

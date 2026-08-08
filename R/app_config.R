@@ -4,9 +4,13 @@
 
 APP_CONFIG <- list(
   app_name = "Bookworm",
-  positions = c(
-    "P" = 1L, "C" = 2L, "1B" = 3L, "2B" = 4L, "3B" = 5L,
-    "SS" = 6L, "LF" = 7L, "CF" = 8L, "RF" = 9L, "ROVER" = 10L
+  positions = c("P","C","1B","2B","3B","SS","LF","LCF","CF","RCF","RF","OF","ROVER","DH"),
+  POSITION_CATEGORY = c(
+    P = "battery", C = "battery",
+    "1B" = "infield", "2B" = "infield", SS = "infield", "3B" = "infield",
+    LF = "outfield", LCF = "outfield", CF = "outfield", RCF = "outfield",
+    RF = "outfield", OF = "outfield", ROVER = "outfield"
+    # DH and blank are intentionally absent: they are non-fielders.
   ),
   outcome_codes = c(
     "1B", "2B", "3B", "HR", "BB", "IBB", "HBP",

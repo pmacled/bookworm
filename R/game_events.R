@@ -7,11 +7,11 @@ new_event <- function(type, payload, seq = NA_integer_, ts = NA_character_) {
 
 make_player <- function(player_id, name, gender,
                         jersey_number = NA_integer_, order_slot = NA_integer_,
-                        position = NA_integer_) {
+                        position = NA_character_) {
   list(player_id = player_id, name = name, gender = gender,
        jersey_number = as.integer(jersey_number),
        order_slot = as.integer(order_slot),
-       position = if (is.na(position)) NA_integer_ else as.integer(position))
+       position = if (length(position) != 1 || is.na(position)) NA_character_ else as.character(position))
 }
 
 make_advance <- function(runner_id, from, to, scored = FALSE, out = FALSE, earned = TRUE) {
