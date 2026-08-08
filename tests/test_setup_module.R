@@ -57,3 +57,12 @@ test_that("setup_server produces a game_start with a run-only home team", {
     expect_equal(length(gs$payload$home$lineup), 0L)   # run-only home
   })
 })
+
+test_that("collect_ruleset coerces batting_size from the select string", {
+  base_in <- list(fielding_preset = "none", start_balls = 1, start_strikes = 1,
+    foul_out = "out", gender_rule = "none", gender_n = 2, innings = 7,
+    run_cap = 0, mercy_diff = 0)
+  expect_true(is.na(collect_ruleset(c(base_in, list(batting_size = "0")))$batting_size))
+  expect_equal(collect_ruleset(c(base_in, list(batting_size = "9")))$batting_size, 9L)
+  expect_equal(collect_ruleset(c(base_in, list(batting_size = "10")))$batting_size, 10L)
+})

@@ -123,7 +123,21 @@ apply_event <- function(state, evt) {
     runs <- max(0L, capped)
     state$score[[team]] <- state$score[[team]] + runs
     state$runs_this_half <- state$runs_this_half + runs
-    return(.refresh_flags(advance_half(state)))
+    # advance_half resets runs_this_half, so .refresh_flags can't see the cap was
+    # hit this half. Evaluate the run-cap notice here (same condition .refresh_flags
+    # uses) and re-append it after the refresh so run-only halves surface the toast.
+    cfg <- state$ruleset
+    cap <- cfg$run_cap_per_inning
+    cap_hit <- !is.na(cap) &&
+      !(isTRUE(cfg$open_last_inning) && state$inning >= cfg$innings) &&
+      state$runs_this_half >= cap
+    state <- .refresh_flags(advance_half(state))
+    if (cap_hit) {
+      state$warnings <- c(state$warnings, list(list(
+        severity = "notice", code = "run_cap",
+        message = sprintf("Run cap of %d reached this inning.", cap))))
+    }
+    return(state)
   }
   if (type == "substitution") return(.refresh_flags(apply_substitution(state, evt)))  # Task 7
   state

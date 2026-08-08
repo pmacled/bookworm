@@ -39,7 +39,7 @@ collect_ruleset <- function(input) {
     starting_count = list(balls = input$start_balls, strikes = input$start_strikes),
     foul_out_rule = input$foul_out,
     batting_gender_rule = list(type = input$gender_rule, n = input$gender_n),
-    batting_size = if ((input$batting_size %||% 0) > 0) input$batting_size else NA_integer_,
+    batting_size = as.integer(input$batting_size %||% "0"),  # selectInput string; coerce maps 0/NA => unlimited
     fielding = fielding,
     innings = input$innings,
     run_cap_per_inning = if ((input$run_cap %||% 0) > 0) input$run_cap else NA_integer_,
