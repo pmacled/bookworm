@@ -24,6 +24,30 @@ test_that("record_outcome_event for K records one out", {
   expect_true(is.na(e$payload$reached))
 })
 
+test_that("record_half_runs_event targets the batting team", {
+  s <- list(batting_team = "home")
+  e <- record_half_runs_event(s, 4)
+  expect_equal(e$type, "half_runs")
+  expect_equal(e$payload$team, "home")
+  expect_equal(e$payload$runs, 4L)
+})
+
+test_that("run-only half: entering runs advances the half via storage", {
+  library(shiny)
+  for (f in c("storage.R")) source(file.path("R", f))
+  st <- make_storage("guest"); gid <- st$create_game(list(name = "T"))
+  gs <- new_event("game_start", list(ruleset = default_ruleset_config(), first_bat = "away",
+    home = list(team_id="H", name="Home", lineup = list()),
+    away = list(team_id="A", name="Away", lineup = list())), seq = 1L)  # both run-only
+  testServer(tracking_server, args = list(storage = st, game_id = gid, game_start_event = gs), {
+    session$flushReact()
+    session$setInputs(half_runs_n = 3, half_runs_go = 1)
+    s <- state()
+    expect_equal(s$score$away, 3L)
+    expect_equal(s$half, "bottom")
+  })
+})
+
 test_that("undo then record does not resurrect the undone event", {
   st <- make_storage("guest")
   gid <- st$create_game(list(name = "T"))

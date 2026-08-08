@@ -1,5 +1,14 @@
 .OUT_OUTCOMES <- c("K","KL","GO","FO","LO","PO")
 
+record_half_runs_event <- function(state, runs) {
+  new_event("half_runs", list(team = state$batting_team, runs = as.integer(runs %||% 0L)))
+}
+
+.batting_team_has_lineup <- function(state) {
+  lu <- state$lineups[[state$batting_team]]
+  length(Filter(function(p) !is.na(p$order_slot), lu)) > 0
+}
+
 record_outcome_event <- function(state, outcome, team) {
   reached <- switch(outcome, "1B"=1L,"2B"=2L,"3B"=3L,"HR"=4L,
                     "BB"=1L,"IBB"=1L,"HBP"=1L,"FC"=1L,"E"=1L, NA_integer_)
@@ -17,13 +26,9 @@ record_outcome_event <- function(state, outcome, team) {
 
 tracking_ui <- function(id) {
   ns <- NS(id)
-  outcomes <- c("1B","2B","3B","HR","BB","K","GO","FO","FC","E")
-  btns <- lapply(outcomes, function(o)
-    actionButton(ns(paste0("o_", o)), o, class = "btn-outline-primary bw-outcome-btn"))
   tagList(
     uiOutput(ns("situation")),
-    div(class = "bw-outcome-grid d-grid",
-        style = "grid-template-columns: repeat(5,1fr); gap:.5rem;", !!!btns),
+    uiOutput(ns("action_panel")),
     div(class = "d-flex gap-2 mt-2",
         actionButton(ns("undo"), "Undo", class = "btn-warning"),
         actionButton(ns("sub"), "Substitution", class = "btn-outline-secondary")),
@@ -53,6 +58,32 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
     outcomes <- c("1B","2B","3B","HR","BB","K","GO","FO","FC","E")
     lapply(outcomes, function(o)
       observeEvent(input[[paste0("o_", o)]], record(o), ignoreInit = TRUE))
+
+    output$action_panel <- renderUI({
+      s <- state()
+      if (.batting_team_has_lineup(s)) {
+        outcomes <- c("1B","2B","3B","HR","BB","K","GO","FO","FC","E")
+        btns <- lapply(outcomes, function(o)
+          actionButton(session$ns(paste0("o_", o)), o, class = "btn-outline-primary bw-outcome-btn"))
+        div(class = "bw-outcome-grid d-grid",
+            style = "grid-template-columns: repeat(5,1fr); gap:.5rem;", !!!btns)
+      } else {
+        div(class = "p-2",
+          tags$p(class = "text-muted small",
+            sprintf("%s is tracked by runs only (no lineup entered).", s$batting_team)),
+          numericInput(session$ns("half_runs_n"), "Runs this inning", value = 0, min = 0, max = 50),
+          actionButton(session$ns("half_runs_go"), "End half-inning", class = "btn-primary bw-outcome-btn"))
+      }
+    })
+
+    observeEvent(input$half_runs_go, {
+      s <- isolate(state())
+      if (identical(s$status, "final")) return(invisible())
+      evt <- record_half_runs_event(s, input$half_runs_n)
+      appended <- storage$append_event(game_id, evt)
+      events(c(isolate(events()), list(appended)))
+      storage$save_snapshot(game_id, isolate(state()))
+    }, ignoreInit = TRUE)
 
     observeEvent(input$undo, {
       ev <- events()
