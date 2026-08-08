@@ -5,7 +5,12 @@ suppressMessages({
   library(shiny); library(bslib); library(htmltools)
   library(jsonlite); library(DBI); library(httr2); library(uuid)
 })
-for (f in list.files("R", pattern = "\\.R$", full.names = TRUE)) source(f)
+# Mirror global.R's load order: rule_presets.R reads STANDARD_COED_FIELDING (from
+# rules_engine.R) at source time, so a naive alphabetical sweep breaks (rule_p < rule_s).
+.r_files <- list.files("R", pattern = "\\.R$", full.names = TRUE)
+.r_first <- file.path("R", c("brand_colors.R", "app_config.R", "rules_engine.R"))
+for (f in c(.r_first, setdiff(.r_files, .r_first))) source(f)
+rm(.r_files, .r_first)
 
 test_that("continue-as-guest wires storage and navigates without a nav error", {
   testServer(bookworm_server, {

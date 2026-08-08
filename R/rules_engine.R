@@ -288,6 +288,19 @@ evaluate_fielding <- function(cfg, defense_lineup) {
   viol
 }
 
+# A ruleset is genderless when nothing in it references player gender. The setup UI
+# uses this to drop the M/F column from the lineup table entirely.
+ruleset_is_genderless <- function(cfg) {
+  f <- cfg$fielding
+  identical(cfg$batting_gender_rule$type, "none") &&
+    identical(cfg$male_walk_rule, "none") &&
+    (f$min_females %||% 0L) == 0L &&
+    is.na(f$max_males %||% NA_integer_) &&
+    length(f$tiers %||% list()) == 0L &&
+    length(cfg$home_run_rule$limit_by_gender %||% list()) == 0L &&
+    !cfg$pinch_runner$eligibility %in% c("same_gender", "last_same_gender_out")
+}
+
 # Returns how many of `runs_on_play` actually count, and whether the cap was reached.
 # same_play_runs_count = TRUE: a play in progress completes fully -- even a play that
 # pushes the half past the cap (e.g. a grand slam) counts every run -- but once an
