@@ -2216,9 +2216,6 @@
     "global.R": {
       "checksum": "31f38083a91b9fb5724a037274a3aa64"
     },
-    "manifest.json.bak": {
-      "checksum": "53865856930f65db454327e4dc1cab68"
-    },
     "R/app_config.R": {
       "checksum": "ec04c25123b9959976d7335c70dd6809"
     },
