@@ -43,7 +43,8 @@ tracking_ui <- function(id) {
         actionButton(ns("sub"), "Substitution", class = "btn-outline-secondary")),
     navset_tab(
       nav_panel("Scorebook", uiOutput(ns("scorebook"))),
-      nav_panel("Box score", tableOutput(ns("box_away")), tableOutput(ns("box_home"))))
+      nav_panel("Box score", tableOutput(ns("box_away")), tableOutput(ns("box_home"))),
+      nav_panel("Help", outcome_help_ui()))
   )
 }
 
@@ -93,7 +94,7 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
       if (.batting_team_has_lineup(s)) {
         outcomes <- c("1B","2B","3B","HR","BB","K","GO","FO","FC","E")
         btns <- lapply(outcomes, function(o)
-          actionButton(session$ns(paste0("o_", o)), o, class = "btn-outline-primary bw-outcome-btn"))
+          outcome_button(session$ns(paste0("o_", o)), o))
         div(class = "bw-outcome-grid d-grid",
             style = "grid-template-columns: repeat(5,1fr); gap:.5rem;", !!!btns)
       } else {
