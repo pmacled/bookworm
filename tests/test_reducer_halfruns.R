@@ -28,6 +28,29 @@ test_that("half_runs respects the run cap at the shipping default", {
   expect_equal(s$score$away, 5L)           # capped (inning 1, not the open last inning)
 })
 
+test_that("half_runs at or below the cap passes through unchanged", {
+  # Regression: the clamp branch used to compute remaining room under the cap
+  # and return *that* rather than min(runs_on_play, room) -- inflating any
+  # at-or-below-cap entry up to the cap. This entry (3) must stay 3, not
+  # become 5.
+  rs <- default_ruleset_config()
+  rs$run_cap$per_inning <- 5L
+  s <- fold_events(list(start_evt(rs),
+    new_event("half_runs", list(team = "away", runs = 3L), seq = 2L)))
+  expect_equal(s$score$away, 3L)
+  expect_equal(s$line_score$away, 3L)
+  expect_false(any(vapply(s$warnings, function(w) identical(w$code, "run_cap"), logical(1))))
+})
+
+test_that("half_runs of zero stays zero under a run cap", {
+  rs <- default_ruleset_config()
+  rs$run_cap$per_inning <- 5L
+  s <- fold_events(list(start_evt(rs),
+    new_event("half_runs", list(team = "away", runs = 0L), seq = 2L)))
+  expect_equal(s$score$away, 0L)
+  expect_equal(s$line_score$away, 0L)
+})
+
 test_that("half_runs surfaces a run_cap notice when the cap applies to the entry", {
   rs <- default_ruleset_config()
   rs$run_cap$per_inning <- 5L

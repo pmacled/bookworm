@@ -308,7 +308,10 @@ apply_run_cap <- function(cfg, runs_before, runs_on_play, inning) {
   runs <- if (isTRUE(rc$same_play_runs_count)) {
     if (runs_before >= cap) 0L else runs_on_play
   } else {
-    max(0L, cap - runs_before)
+    # Clamp to *remaining room under the cap*, not to the room itself: an
+    # at-or-below-cap entry (e.g. half_runs of 3 against a cap of 5) must
+    # pass through unchanged, not get inflated up to the cap.
+    min(runs_on_play, max(0L, cap - runs_before))
   }
   list(runs = as.integer(runs), cap_hit = total >= cap)
 }

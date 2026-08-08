@@ -33,6 +33,21 @@ test_that("run cap limits non-open innings", {
   expect_equal(apply_run_cap(cfg, runs_before = 0L, runs_on_play = 8L, inning = 7L)$runs, 8L)
 })
 
+test_that("the clamp branch passes an at-or-below-cap entry through unchanged", {
+  # Regression: `max(0L, cap - runs_before)` ignores runs_on_play entirely,
+  # so it computes remaining room under the cap and returns *that* -- which
+  # happens to equal the over-cap test above (8 clamps to 5 either way), but
+  # silently inflates any entry already at or below the cap up to it.
+  cfg <- coerce_ruleset_config(list(run_cap = list(per_inning = 5L, same_play_runs_count = FALSE)))
+  cr <- apply_run_cap(cfg, runs_before = 0L, runs_on_play = 2L, inning = 1L)
+  expect_equal(cr$runs, 2L)     # must stay 2, not inflate to the cap (5)
+  expect_false(cr$cap_hit)
+
+  cr0 <- apply_run_cap(cfg, runs_before = 0L, runs_on_play = 0L, inning = 1L)
+  expect_equal(cr0$runs, 0L)    # a zero entry must stay zero, not become the cap
+  expect_false(cr0$cap_hit)
+})
+
 test_that("at the shipping default, a play that crosses the cap still counts in full (grand slam preserved)", {
   cfg <- coerce_ruleset_config(list(run_cap = list(per_inning = 5L)))
   expect_true(cfg$run_cap$same_play_runs_count)   # shipping default, not overridden
