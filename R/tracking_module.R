@@ -19,7 +19,7 @@ record_half_runs_event <- function(state, runs) {
 }
 
 record_outcome_event <- function(state, outcome, team) {
-  reached <- switch(outcome, "1B"=1L,"2B"=2L,"3B"=3L,"HR"=4L,
+  reached <- switch(outcome, "1B"=1L,"2B"=2L,"3B"=3L,"HR"=4L,"ITPHR"=4L,
                     "BB"=1L,"IBB"=1L,"HBP"=1L,"FC"=1L,"E"=1L, NA_integer_)
   outs_on_play <- if (outcome %in% .OUT_OUTCOMES) 1L else 0L
   advances <- suggest_advances(state, outcome)
@@ -43,7 +43,11 @@ tracking_ui <- function(id) {
         actionButton(ns("sub"), "Substitution", class = "btn-outline-secondary")),
     navset_tab(
       nav_panel("Scorebook", uiOutput(ns("scorebook"))),
-      nav_panel("Box score", tableOutput(ns("box_away")), tableOutput(ns("box_home"))))
+      nav_panel("Box score",
+        div(class = "p-2",
+          uiOutput(ns("box_away_hdr")), DT::DTOutput(ns("box_away")),
+          uiOutput(ns("box_home_hdr")), DT::DTOutput(ns("box_home")))),
+      nav_panel("Help", outcome_help_ui()))
   )
 }
 
@@ -135,8 +139,18 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
         if (!is.null(s$current_batter)) tags$strong(s$current_batter$name))
     })
     output$scorebook <- renderUI(render_scorebook_svg(state(), state()$batting_team))
-    output$box_away <- renderTable(batting_lines(state(), "away"))
-    output$box_home <- renderTable(batting_lines(state(), "home"))
+    .box_dt <- function(team) DT::renderDT({
+      DT::datatable(batting_lines(state(), team),
+        rownames = FALSE, class = "compact stripe",
+        options = list(dom = "t", paging = FALSE, ordering = TRUE,
+                       order = list(list(0, "asc"))))
+    })
+    output$box_away <- .box_dt("away")
+    output$box_home <- .box_dt("home")
+
+    .team_name <- function(team) state()$teams[[team]]$name %||% team
+    output$box_away_hdr <- renderUI(tags$h5(class = "mt-2", .team_name("away")))
+    output$box_home_hdr <- renderUI(tags$h5(class = "mt-3", .team_name("home")))
 
     state
   })

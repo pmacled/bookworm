@@ -1,4 +1,4 @@
-.HIT <- c("1B","2B","3B","HR")
+.HIT <- c("1B","2B","3B","HR","ITPHR")
 .AB_EXCLUDE <- c("BB","IBB","HBP","SF","SAC")  # not at-bats
 
 batting_lines <- function(state, team) {
@@ -20,10 +20,20 @@ batting_lines <- function(state, team) {
     RBI[[id]] <- RBI[[id]] + as.integer(rec$rbi %||% 0L)
     if (!is.na(rec$reached) && rec$reached == 4L) R[[id]] <- R[[id]] + 1L
   }
-  data.frame(player_id = ids, name = names_,
-    AB = unlist(AB[ids]), R = unlist(R[ids]), H = unlist(H[ids]),
-    RBI = unlist(RBI[ids]), BB = unlist(BB[ids]), K = unlist(K[ids]),
+  ord <- vapply(lineup, function(p) p$order_slot %||% NA_integer_, integer(1))
+  # unlist(X[ids]) on an empty named list returns NULL, which data.frame() would
+  # silently drop as a column — coerce back to integer(0) so an empty lineup
+  # (run-only team) still yields all eight columns, just with zero rows.
+  stat_col <- function(x) as.integer(unlist(x[ids]) %||% integer(0))
+  df <- data.frame(
+    Order = ord, Player = names_,
+    AB = stat_col(AB), R = stat_col(R), H = stat_col(H),
+    RBI = stat_col(RBI), BB = stat_col(BB), K = stat_col(K),
     row.names = NULL, stringsAsFactors = FALSE)
+  # Batters in order, then anyone without a slot (defensive subs, unentered players).
+  df <- df[order(is.na(df$Order), df$Order), , drop = FALSE]
+  rownames(df) <- NULL
+  df
 }
 
 line_score <- function(state) {

@@ -39,7 +39,7 @@ render_scorebook_svg <- function(state, team) {
     }
   }
   grid <- sprintf('<rect x="0" y="0" width="%d" height="%d" fill="none" stroke="%s"/>',
-                  w, h, BRAND_COLORS$secondary)
+                  w, h, BRAND_COLORS$rule_line)
   htmltools::HTML(sprintf(
     '<div class="bw-scorebook"><svg width="%d" height="%d" viewBox="0 0 %d %d" xmlns="http://www.w3.org/2000/svg">%s%s</svg></div>',
     w, h, w, h, grid, paste(rows, collapse = "")))
