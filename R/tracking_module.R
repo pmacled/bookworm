@@ -68,12 +68,12 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
           easyClose = TRUE, footer = modalButton("Got it")))
       }
       shown_violation_sig(sig)
-      new_notice_codes <- setdiff(
-        vapply(Filter(function(x) identical(x$severity,"notice"), w), function(x) x$code, character(1)),
-        shown_notice_codes())
-      for (m in p$notices) showNotification(m, type = "message", duration = 4)
-      shown_notice_codes(union(shown_notice_codes(),
-        vapply(Filter(function(x) identical(x$severity,"notice"), w), function(x) x$code, character(1))))
+      notice_items <- Filter(function(x) identical(x$severity, "notice"), w)
+      notice_codes <- vapply(notice_items, function(x) x$code, character(1))
+      new_codes <- setdiff(notice_codes, shown_notice_codes())
+      for (it in notice_items) if (it$code %in% new_codes)
+        showNotification(it$message, type = "message", duration = 4)
+      shown_notice_codes(notice_codes)  # track current set; a notice re-toasts only if it clears then recurs
     }, ignoreInit = FALSE)
 
     record <- function(outcome) {
