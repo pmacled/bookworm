@@ -38,3 +38,22 @@ test_that("build_game_start_event accepts an empty lineup (run-only team)", {
   expect_true(validate_event(evt)$ok)
   expect_equal(length(evt$payload$home$lineup), 0L)
 })
+
+test_that("setup_server produces a game_start with a run-only home team", {
+  library(shiny)
+  testServer(setup_server, {
+    session$flushReact()                             # warm-up: see Task 16 note re
+    # testServer's ignoreInit-observer-fires-on-first-setInputs quirk (test-harness
+    # artifact only; not a production bug)
+    session$setInputs(away_add = 1)                 # one away row
+    # Fill the away row (id 1), leave home empty, set required rule inputs, start.
+    session$setInputs(away_name_1 = "Sam", away_gender_1 = "F", away_jersey_1 = 9, away_pos_1 = "SS",
+      away_name = "Away", home_name = "Home", start_balls = 1, start_strikes = 1,
+      foul_out = "out", batting_size = "0", gender_rule = "none", innings = 7,
+      run_cap = 0, mercy_diff = 0, fielding_preset = "none", start = 1)
+    gs <- session$returned()
+    expect_equal(gs$type, "game_start")
+    expect_equal(length(gs$payload$away$lineup), 1L)
+    expect_equal(length(gs$payload$home$lineup), 0L)   # run-only home
+  })
+})
