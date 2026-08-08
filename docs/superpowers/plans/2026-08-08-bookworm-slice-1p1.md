@@ -284,8 +284,11 @@ STANDARD_COED_FIELDING <- list(
 
 .position_category <- function(pos) {
   if (is.null(pos) || length(pos) != 1 || is.na(pos)) return(NA_character_)
-  cat <- APP_CONFIG$POSITION_CATEGORY[[as.character(pos)]]
-  if (is.null(cat)) NA_character_ else cat
+  key <- as.character(pos)
+  # POSITION_CATEGORY is a named CHARACTER VECTOR: `[[missing]]` throws
+  # "subscript out of bounds", so gate on membership first.
+  if (!key %in% names(APP_CONFIG$POSITION_CATEGORY)) return(NA_character_)
+  unname(APP_CONFIG$POSITION_CATEGORY[[key]])
 }
 
 evaluate_fielding <- function(cfg, defense_lineup) {
