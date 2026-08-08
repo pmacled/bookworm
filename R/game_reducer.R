@@ -93,6 +93,15 @@ apply_event <- function(state, evt) {
     state <- apply_plate_appearance(state, evt)   # defined in Task 5
     return(.refresh_flags(state))
   }
+  if (type == "half_runs") {
+    team <- state$batting_team
+    runs <- as.integer(evt$payload$runs %||% 0L)
+    capped <- apply_run_cap(state$ruleset, state$runs_this_half + runs, state$inning) - state$runs_this_half
+    runs <- max(0L, capped)
+    state$score[[team]] <- state$score[[team]] + runs
+    state$runs_this_half <- state$runs_this_half + runs
+    return(.refresh_flags(advance_half(state)))
+  }
   if (type == "substitution") return(.refresh_flags(apply_substitution(state, evt)))  # Task 7
   state
 }
