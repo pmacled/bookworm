@@ -16,3 +16,20 @@ test_that("continue as guest yields guest identity", {
     expect_equal(identity()$mode, "guest")
   })
 })
+
+test_that("a sign-in function that throws surfaces a message instead of crashing", {
+  boom <- function(email, password) stop("connection refused")
+  testServer(auth_server, args = list(sign_in = boom, sign_up = boom), {
+    session$setInputs(email = "a@b.c", password = "x", do_sign_in = 1)
+    expect_true(nzchar(output$err))
+    expect_true(is.na(identity()$mode))   # still unauthenticated
+  })
+})
+
+test_that("guest mode is unaffected by a broken sign-in backend", {
+  boom <- function(email, password) stop("connection refused")
+  testServer(auth_server, args = list(sign_in = boom, sign_up = boom), {
+    session$setInputs(do_guest = 1)
+    expect_equal(identity()$mode, "guest")
+  })
+})
