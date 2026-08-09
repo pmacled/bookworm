@@ -11,76 +11,131 @@ lineup_of <- function(...) {
   lapply(seq_along(ps), function(i) { p <- ps[[i]]; p$order_slot <- i; p })
 }
 
+codes <- function(r) vapply(r$items, function(i) i$code, character(1))
+msgs  <- function(r) vapply(r$items, function(i) i$message, character(1))
+
+test_that("every item carries a severity, a code and a message", {
+  # Codes are what main's notice-dedupe machinery keys on; items without them
+  # cannot be routed through it.
+  cfg <- preset_ruleset("gameon_summer")
+  lu <- lineup_of(pl("1","A","M", 7L, pos = "P"), pl("2","B","M", 7L, pos = "C"),
+                  pl("3","C","M", 3L, pos = "SS"), pl("4","D","M", 4L, pos = "LF"))
+  r <- validate_lineup(cfg, lu, "Away")
+  expect_gt(length(r$items), 0L)
+  for (i in r$items) {
+    expect_true(i$severity %in% c("violation", "notice"))
+    expect_true(is.character(i$code) && nzchar(i$code))
+    expect_true(is.character(i$message) && nzchar(i$message))
+    expect_named(i, c("severity", "code", "message"))
+  }
+})
+
 test_that("an empty lineup is legal and reported as run-only", {
   r <- validate_lineup(preset_ruleset("anything_goes"), list(), "Away")
   expect_true(r$ok)
-  expect_match(paste(vapply(r$items, function(i) i$message, character(1))), "runs")
+  expect_equal(codes(r), "run_only")
+  expect_equal(msgs(r), "Away has no lineup — it will be tracked by runs per inning.")
 })
 
 test_that("a batting-size mismatch is a notice, not a failure", {
   cfg <- preset_ruleset("standard_baseball")   # batting_size 9
   lu <- lineup_of(pl("1","A","M"), pl("2","B","M"))
   r <- validate_lineup(cfg, lu, "Away")
-  msgs <- vapply(r$items, function(i) i$message, character(1))
-  expect_true(any(grepl("9", msgs)))
-  expect_true(all(vapply(r$items, function(i) i$severity != "violation", logical(1))))
+  expect_equal(codes(r), "batting_size")
+  expect_equal(msgs(r), "2 batters entered; this ruleset expects 9.")
+  expect_equal(r$items[[1]]$severity, "notice")
   # A notice-severity item alone must not flip ok to FALSE -- only violations do.
   expect_true(r$ok)
 })
 
 test_that("duplicate jersey numbers are flagged", {
   lu <- lineup_of(pl("1","A","M", 7L), pl("2","B","F", 7L))
-  msgs <- vapply(validate_lineup(preset_ruleset("anything_goes"), lu, "Away")$items,
-                 function(i) i$message, character(1))
-  expect_true(any(grepl("7", msgs)))
+  r <- validate_lineup(preset_ruleset("anything_goes"), lu, "Away")
+  expect_equal(codes(r), "duplicate_jersey")
+  expect_equal(msgs(r), "Jersey number 7 is used more than once.")
 })
 
 test_that("blank jerseys are not treated as duplicates", {
   lu <- lineup_of(pl("1","A","M"), pl("2","B","F"))
-  msgs <- vapply(validate_lineup(preset_ruleset("anything_goes"), lu, "Away")$items,
-                 function(i) i$message, character(1))
-  expect_false(any(grepl("jersey", msgs, ignore.case = TRUE)))
+  r <- validate_lineup(preset_ruleset("anything_goes"), lu, "Away")
+  expect_false("duplicate_jersey" %in% codes(r))
 })
 
-test_that("duplicate names are flagged", {
-  lu <- lineup_of(pl("1","Sam","M"), pl("2","Sam","F"))
-  msgs <- vapply(validate_lineup(preset_ruleset("anything_goes"), lu, "Away")$items,
-                 function(i) i$message, character(1))
-  expect_true(any(grepl("Sam", msgs)))
+test_that("duplicate names are flagged, reported in the first entry's casing", {
+  lu <- lineup_of(pl("1","Sam","M"), pl("2","sam","F"))
+  r <- validate_lineup(preset_ruleset("anything_goes"), lu, "Away")
+  expect_equal(codes(r), "duplicate_name")
+  expect_equal(msgs(r), "More than one player is named \"Sam\".")
 })
 
-test_that("a batting-order gender violation is reported as a violation", {
+test_that("a batting-order gender violation names the offending slot", {
   cfg <- preset_ruleset("gameon_summer")   # max 2 males in a row
   lu <- lineup_of(pl("1","A","M"), pl("2","B","M"), pl("3","C","M"), pl("4","D","F"))
   r <- validate_lineup(cfg, lu, "Away")
   expect_false(r$ok)
-  expect_true(any(vapply(r$items, function(i) identical(i$severity, "violation"), logical(1))))
+  expect_equal(codes(r), "batting_gender_order")
+  expect_equal(msgs(r), "Batting order: C (slot 3) breaks the gender rule.")
+})
+
+test_that("a forward gender break is NOT also reported as a wrap-around break", {
+  # Regression: `seen2` accumulated the whole doubled sequence, so the FORWARD
+  # break recurred at an index past length(g) and was re-reported as a wrap
+  # break. On M M M F the user got two violations, the second claiming
+  # "slot 4 back to slot 1" -- but slot 4 -> slot 1 is F -> M, perfectly legal.
+  cfg <- preset_ruleset("gameon_summer")
+  lu <- lineup_of(pl("1","A","M"), pl("2","B","M"), pl("3","C","M"), pl("4","D","F"))
+  r <- validate_lineup(cfg, lu, "Away")
+  expect_length(Filter(function(i) identical(i$severity, "violation"), r$items), 1L)
+  expect_false(any(grepl("wrap", msgs(r), ignore.case = TRUE)))
 })
 
 test_that("the batting order wraps when checking the gender rule", {
   cfg <- preset_ruleset("gameon_summer")
   # M F M M reads fine forwards, but wrapping gives ... M M | M F -> three males.
   lu <- lineup_of(pl("1","A","M"), pl("2","B","F"), pl("3","C","M"), pl("4","D","M"))
-  msgs <- vapply(validate_lineup(cfg, lu, "Away")$items, function(i) i$message, character(1))
-  expect_true(any(grepl("wrap", msgs, ignore.case = TRUE)))
+  r <- validate_lineup(cfg, lu, "Away")
+  expect_equal(codes(r), "batting_gender_wrap")
+  expect_match(msgs(r), "wraps around", fixed = TRUE)
+  expect_match(msgs(r), "A (slot 1)", fixed = TRUE)   # A is the batter who breaks it
 })
 
-test_that("fielding violations from the engine are included", {
+test_that("a break that exists only around the turn is still caught", {
+  # M M F M M reads fine forwards; only the wrap (slot 4, slot 5 then slot 1)
+  # gives three males. Seeding the wrap window from tail(g, n) must not lose this.
+  cfg <- preset_ruleset("gameon_summer")
+  lu <- lineup_of(pl("1","A","M"), pl("2","B","M"), pl("3","C","F"),
+                  pl("4","D","M"), pl("5","E","M"))
+  r <- validate_lineup(cfg, lu, "Away")
+  expect_equal(codes(r), "batting_gender_wrap")
+  expect_match(msgs(r), "A (slot 1)", fixed = TRUE)
+})
+
+test_that("an all-male order breaks both forwards and around the turn", {
+  # Not a false positive: M M M M really is broken at the wrap too.
+  cfg <- preset_ruleset("gameon_summer")
+  lu <- lineup_of(pl("1","A","M"), pl("2","B","M"), pl("3","C","M"), pl("4","D","M"))
+  r <- validate_lineup(cfg, lu, "Away")
+  expect_equal(codes(r), c("batting_gender_order", "batting_gender_wrap"))
+})
+
+test_that("fielding violations from the engine are included, codes intact", {
   cfg <- preset_ruleset("gameon_summer")   # min 4 females
   lu <- lineup_of(
     pl("1","A","M", 1L, 1L, "P"), pl("2","B","M", 2L, 2L, "C"),
     pl("3","C","M", 3L, 3L, "SS"), pl("4","D","M", 4L, 4L, "LF"))
   r <- validate_lineup(cfg, lu, "Away")
   expect_false(r$ok)
-  msgs <- vapply(r$items, function(i) i$message, character(1))
-  expect_true(any(grepl("female", msgs, ignore.case = TRUE)))
+  expect_true("min_females" %in% codes(r))
+  hit <- Filter(function(i) identical(i$code, "min_females"), r$items)
+  expect_equal(hit[[1]]$message, "Need at least 4 females in the field (have 0).")
 })
 
 test_that("a fielder-count mismatch is a notice", {
   cfg <- preset_ruleset("standard_baseball")   # fielder_count 9
   lu <- lineup_of(pl("1","A","M", 1L, 1L, "P"), pl("2","B","M", 2L, 2L, "C"))
-  items <- validate_lineup(cfg, lu, "Away")$items
-  hit <- Filter(function(i) grepl("fielder", i$message, ignore.case = TRUE), items)
+  r <- validate_lineup(cfg, lu, "Away")
+  hit <- Filter(function(i) identical(i$code, "fielder_count"), r$items)
   expect_length(hit, 1L)
   expect_equal(hit[[1]]$severity, "notice")
+  expect_equal(hit[[1]]$message, "2 fielders assigned; this ruleset expects 9.")
 })

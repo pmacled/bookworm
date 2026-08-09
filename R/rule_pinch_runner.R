@@ -15,11 +15,16 @@
   if (length(hit)) hit[[1]]$gender else NA_character_
 }
 
+# Returns list(ok =, items =) where each item is {severity, code, message} -- the
+# same shape as evaluate_fielding() and validate_lineup(). The `code` is what the
+# tracking module's notice machinery dedupes on, so a bare string here would need
+# an adapter before these messages could reach the user at all.
 evaluate_pinch_runner <- function(cfg, state, out_player, in_player) {
   pr <- cfg$pinch_runner
   team <- state$batting_team
-  errors <- character()
-  add <- function(m) errors <<- c(errors, m)
+  items <- list()
+  add <- function(code, message)
+    items[[length(items) + 1]] <<- list(severity = "violation", code = code, message = message)
 
   log <- state$pinch_runner_log %||% list()
   for_team <- Filter(function(e) identical(e$team, team), log)
@@ -27,26 +32,36 @@ evaluate_pinch_runner <- function(cfg, state, out_player, in_player) {
   n_inning <- sum(vapply(for_team, function(e)
     identical(e$inning, state$inning) && identical(e$half, state$half), logical(1)))
   if (!is.na(pr$max_per_inning) && n_inning >= pr$max_per_inning)
-    add(sprintf("Only %d pinch runner(s) allowed per inning; %d already used.",
+    add("pr_max_per_inning",
+        sprintf("Only %d pinch runner(s) allowed per inning; %d already used.",
                 pr$max_per_inning, n_inning))
 
-  if (!is.na(pr$max_per_game) && length(for_team) >= pr$max_per_game)
-    add(if (pr$max_per_game == 0L) "Pinch runners are not allowed under this ruleset."
-        else sprintf("Only %d pinch runner(s) allowed per game; %d already used.",
-                     pr$max_per_game, length(for_team)))
+  if (!is.na(pr$max_per_game) && length(for_team) >= pr$max_per_game) {
+    # Distinct code, not just distinct wording: "none are allowed at all" and
+    # "you have used up your allowance" are different situations to the scorer.
+    if (pr$max_per_game == 0L)
+      add("pr_not_allowed", "Pinch runners are not allowed under this ruleset.")
+    else
+      add("pr_max_per_game",
+          sprintf("Only %d pinch runner(s) allowed per game; %d already used.",
+                  pr$max_per_game, length(for_team)))
+  }
 
   n_player <- sum(vapply(for_team,
     function(e) identical(e$in_player_id, in_player$player_id), logical(1)))
   if (!is.na(pr$max_per_player_per_game) && n_player >= pr$max_per_player_per_game)
-    add(sprintf("%s has already pinch run %d time(s) this game.", in_player$name, n_player))
+    add("pr_max_per_player",
+        sprintf("%s has already pinch run %d time(s) this game.", in_player$name, n_player))
 
   if (identical(pr$allowed_for, "pitcher_catcher") &&
       !isTRUE(as.character(out_player$position) %in% c("P", "C")))
-    add("Only the pitcher or catcher may have a courtesy runner under this ruleset.")
+    add("pr_allowed_for",
+        "Only the pitcher or catcher may have a courtesy runner under this ruleset.")
 
   elig <- pr$eligibility
   if (identical(elig, "same_gender") && !identical(in_player$gender, out_player$gender))
-    add(sprintf("The runner must be the same gender as %s.", out_player$name))
+    add("pr_same_gender",
+        sprintf("The runner must be the same gender as %s.", out_player$name))
 
   if (elig %in% c("last_out", "last_same_gender_out")) {
     outs <- .recent_outs(state, team)
@@ -56,12 +71,13 @@ evaluate_pinch_runner <- function(cfg, state, out_player, in_player) {
     }
     expected <- if (length(outs)) outs[[1]] else NA_character_
     if (is.na(expected))
-      add("No eligible previous out to run for yet.")
+      add("pr_no_eligible_out", "No eligible previous out to run for yet.")
     else if (!identical(in_player$player_id, expected))
-      add(sprintf("The runner must be the last %sout (%s).",
+      add("pr_last_out",
+          sprintf("The runner must be the last %sout (%s).",
                   if (identical(elig, "last_same_gender_out")) "same-gender " else "",
                   expected))
   }
 
-  list(ok = length(errors) == 0, errors = errors)
+  list(ok = length(items) == 0, items = items)
 }
