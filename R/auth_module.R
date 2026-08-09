@@ -121,13 +121,14 @@ auth_server <- function(
       ))
     )
 
-    # On load, ask the browser for any stored remember-me token.
-    if (supabase_configured()) {
-      session$onFlushed(
-        function() session$sendCustomMessage("bw_getStoredUser", ""),
-        once = TRUE
-      )
-    }
+    # Ask the browser for any stored remember-me token — but only once the
+    # client JS has registered its handlers (input$jsReady), so the message is
+    # never sent to an unregistered handler.
+    observeEvent(input$jsReady, {
+      if (supabase_configured()) {
+        session$sendCustomMessage("bw_getStoredUser", "")
+      }
+    })
 
     # Auto-login: validate the stored token; on success sign the user in, on
     # failure clear the stale localStorage entry.
