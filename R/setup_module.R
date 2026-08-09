@@ -29,16 +29,28 @@ collect_lineup <- function(input, prefix, row_ids, show_gender = TRUE) {
   players
 }
 
-.pos_or_na <- function(x) if (is.null(x) || is.na(x) || x <= 0) NA_integer_ else as.integer(x)
+# A numeric box where 0 means "no limit": empty or non-positive reads as NA.
+.pos_or_na <- function(x)
+  if (is.null(x) || length(x) != 1 || is.na(x) || x <= 0) NA_integer_ else as.integer(x)
+
+# A numeric box where 0 is a real value and means "no requirement" (the fielding
+# gender minimums). A cleared numericInput submits NA, and these three used to be
+# read with a bare `%||%`, which only catches NULL -- so the NA sailed through
+# collect_ruleset, past validate_ruleset_config (which validates nothing under
+# `fielding`), and into the persisted game_start event, where it made every
+# subsequent evaluate_fielding() throw and the game permanently unloadable.
+.count_or_zero <- function(x)
+  if (is.null(x) || length(x) != 1 || is.na(x) || x < 0) 0L else as.integer(x)
 
 collect_ruleset <- function(input) {
   fielding <- switch(input$fielding_preset %||% "none",
     "standard_coed" = STANDARD_COED_FIELDING,
     "custom" = list(
-      min_females = input$min_females %||% 0L,
+      min_females = .count_or_zero(input$min_females),
       max_males = .pos_or_na(input$max_males),
       tiers = list(list(females = 0L,
-        outfield = input$of_females %||% 0L, infield = input$if_females %||% 0L,
+        outfield = .count_or_zero(input$of_females),
+        infield = .count_or_zero(input$if_females),
         battery = input$battery_mode %||% "any")),
       position_requirements = list()),
     list(min_females = 0L, max_males = NA_integer_, tiers = list(),
@@ -56,8 +68,9 @@ collect_ruleset <- function(input) {
     M = .pos_or_na(input$hr_limit_m), F = .pos_or_na(input$hr_limit_f)))
 
   gender_type <- input$gender_rule %||% "none"
-  coerce_ruleset_config(list(
-    preset = input$preset %||% "anything_goes",
+  preset_id <- input$preset %||% "anything_goes"
+  cfg <- coerce_ruleset_config(list(
+    preset = preset_id,
     starting_count = list(balls = input$start_balls, strikes = input$start_strikes),
     foul_out_rule = input$foul_out,
     batting_gender_rule = list(type = gender_type,
@@ -82,6 +95,20 @@ collect_ruleset <- function(input) {
       max_per_player_per_game = .pos_or_na(input$pr_player),
       eligibility = input$pr_elig %||% "anyone",
       allowed_for = input$pr_for %||% "anyone")))
+
+  # `preset` is persisted into game_start and the README's roadmap ("presents it
+  # as a diff against the closest built-in preset") depends on it being true.
+  # Recording the picker's value verbatim makes it a lie the moment the user edits
+  # any Advanced control, so compare what was actually collected against the named
+  # preset and downgrade to "custom" when they differ. An unrecognised id (e.g. a
+  # saved league ruleset) has nothing to compare against, so it passes through.
+  base <- tryCatch(preset_ruleset(preset_id), error = function(e) NULL)
+  if (!is.null(base)) {
+    a <- cfg;  a$preset <- NULL
+    b <- base; b$preset <- NULL
+    if (!identical(a, b)) cfg$preset <- "custom"
+  }
+  cfg
 }
 
 .POS_CHOICES <- function()
@@ -227,8 +254,10 @@ setup_server <- function(id) {
     counter <- reactiveVal(0L)
 
     # The chosen ruleset, read live so the lineup table can drop its gender column.
-    ruleset <- reactive(tryCatch(collect_ruleset(input),
-                                 error = function(e) default_ruleset_config()))
+    # No tryCatch: collect_ruleset() reads every input through an NA-safe helper and
+    # hands the result to coerce_ruleset_config(), which merges rather than
+    # validates -- it has no throwing path. (test_setup_module.R pins that.)
+    ruleset <- reactive(collect_ruleset(input))
 
     # show_gender is exposed as a reactiveVal, not a plain reactive(), and only ever
     # *set* when the boolean actually flips. A plain `reactive(!ruleset_is_genderless(ruleset()))`
@@ -368,7 +397,17 @@ setup_server <- function(id) {
                    lineup = collect_lineup(input, "home", rows$home(), show_gender = sg))
       output$away_validation <- renderUI(.validation_ui("away", input$away_name %||% "Away"))
       output$home_validation <- renderUI(.validation_ui("home", input$home_name %||% "Home"))
-      game_start(build_game_start_event(cfg, home, away, "away"))
+      # An unhandled error here does not just fail the click: Shiny tears the whole
+      # session down with a generic "An error has occurred", and the perfectly good
+      # message build_game_start_event() computed goes to the log where the scorer
+      # will never see it. A cleared numeric box is enough to trigger it, so the
+      # reason has to come back to the user instead.
+      evt <- tryCatch(build_game_start_event(cfg, home, away, "away"),
+        error = function(e) {
+          showNotification(conditionMessage(e), type = "error", duration = 12)
+          NULL
+        })
+      if (!is.null(evt)) game_start(evt)
     })
     game_start
   })

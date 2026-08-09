@@ -35,8 +35,9 @@ evaluate_home_run_limit <- function(cfg, state, batter, outcome) {
   if (already < limit) return(pass)
 
   replacement <- unname(.OVER_LIMIT_OUTCOME[[cfg$home_run_rule$over_limit_result]])
-  # `outcome_meta` is a slice-2.0 addition not yet merged into this branch; guard
-  # rather than assume it exists.
+  # APP_CONFIG$outcome_meta arrived with slice 2.0 (ab9be84) and every replacement
+  # code above is a key in it, so this lookup resolves; %||% is belt-and-braces
+  # against a future code being added to .OVER_LIMIT_OUTCOME but not to the glossary.
   lbl <- APP_CONFIG$outcome_meta[[replacement]]$label %||% replacement
   list(outcome = replacement,
        warning = list(severity = "notice", code = "home_run_limit",
