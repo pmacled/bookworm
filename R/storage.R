@@ -40,12 +40,14 @@ make_storage <- function(
           game_id = character(),
           name = character(),
           status = character(),
-          updated_at = character()
+          updated_at = character(),
+          relationship = character()
         ))
       }
       do.call(
         rbind,
         lapply(env$games, function(g) {
+          g$relationship <- "owned"
           as.data.frame(g, stringsAsFactors = FALSE)
         })
       )
@@ -131,10 +133,36 @@ make_storage <- function(
       invisible(NULL)
     },
     list_games = function() {
+      # Surface every game the user may view:
+      #   * games they own directly
+      #   * games in a league they own or are a member of
+      #   * games shared with them directly (game_shares)
+      # `relationship` lets the UI distinguish these; ordered owned > league >
+      # shared so a game the user owns is labeled as owned even if it also
+      # matches via league or share.
       DBI::dbGetQuery(
         con,
-        "select id as game_id, coalesce(location,'Game') as name, status, updated_at::text
-           from games where owner_id=$1 order by updated_at desc",
+        "select g.id as game_id,
+                coalesce(g.location, 'Game') as name,
+                g.status,
+                g.updated_at::text as updated_at,
+                case
+                  when g.owner_id = $1 then 'owned'
+                  when l.id is not null then 'league'
+                  else 'shared'
+                end as relationship
+           from games g
+           left join leagues l
+             on l.id = g.league_id
+            and (l.owner_id = $1
+                 or exists (select 1 from league_members m
+                             where m.league_id = l.id and m.user_id = $1))
+           left join game_shares s
+             on s.game_id = g.id and s.user_id = $1
+          where g.owner_id = $1
+             or l.id is not null
+             or s.game_id is not null
+          order by g.updated_at desc",
         params = list(user_id)
       )
     }

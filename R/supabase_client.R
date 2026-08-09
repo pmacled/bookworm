@@ -4,9 +4,7 @@ supabase_configured <- function() {
     "SUPABASE_DB_PORT",
     "SUPABASE_DB_NAME",
     "SUPABASE_DB_USER",
-    "SUPABASE_DB_PASSWORD",
-    "SUPABASE_URL",
-    "SUPABASE_PUBLISHABLE_KEY"
+    "SUPABASE_DB_PASSWORD"
   )
   all(nzchar(Sys.getenv(vars)))
 }
@@ -30,22 +28,22 @@ supabase_connect <- function() {
   list(
     ok = FALSE,
     user_id = NA_character_,
-    access_token = NA_character_,
+    is_admin = FALSE,
     error = friendly_auth_error(msg)
   )
 }
 
-# GoTrue's raw messages are terse and sometimes cryptic. Map the ones we know;
-# pass anything else through so a real backend message is never swallowed.
+# Map the internal messages we raise to friendly copy; pass anything else
+# through so a real backend message is never swallowed.
 friendly_auth_error <- function(msg) {
   if (is.null(msg) || length(msg) != 1 || is.na(msg) || !nzchar(msg)) {
     return("Sign-in failed. Please try again.")
   }
   known <- c(
-    "Invalid login credentials" = "That email or password is not correct.",
-    "Email not confirmed" = "Check your inbox and confirm your email address first.",
-    "User already registered" = "An account with that email already exists — try signing in.",
-    "Password should be at least 6 characters" = "Passwords must be at least 6 characters long."
+    "invalid_credentials" = "That username or password is not correct.",
+    "username_taken" = "That username is already taken — try signing in.",
+    "username_invalid" = "Usernames must be 3-30 characters: letters, numbers, or underscore.",
+    "password_too_short" = "Passwords must be at least 6 characters long."
   )
   if (msg %in% names(known)) {
     return(unname(known[[msg]]))
@@ -53,55 +51,78 @@ friendly_auth_error <- function(msg) {
   msg
 }
 
-.gotrue_parse <- function(body) {
-  if (!is.null(body$access_token) && !is.null(body$user)) {
-    return(list(
-      ok = TRUE,
-      user_id = body$user$id,
-      access_token = body$access_token,
-      error = NA_character_
-    ))
-  }
-  msg <- body$error_description %||%
-    body$msg %||%
-    body$error %||%
-    "authentication failed"
-  .auth_error(msg)
+.valid_username <- function(username) {
+  is.character(username) &&
+    length(username) == 1 &&
+    !is.na(username) &&
+    grepl("^[A-Za-z0-9_]{3,30}$", username)
 }
 
-.gotrue_request <- function(
-  path,
-  email,
-  password,
-  perform = httr2::req_perform
-) {
-  base <- Sys.getenv("SUPABASE_URL")
-  if (!nzchar(base)) {
-    return(.auth_error("Saving is not configured on this deployment."))
+# Password verification and hashing happen in Postgres via pgcrypto's crypt(),
+# so raw passwords are never compared or stored in R. `connect` is injectable
+# so tests can supply a stub connection instead of a live database.
+db_sign_in <- function(username, password, connect = supabase_connect) {
+  if (!.valid_username(username)) {
+    return(.auth_error("invalid_credentials"))
   }
-  # req_error(is_error = FALSE) suppresses HTTP *status* errors but not transport
-  # errors (DNS, refused connection, TLS), which is why the whole call is wrapped.
-  # `perform` is injectable so tests can exercise this tryCatch with a stub that
-  # throws, instead of relying on a real network failure to reach it.
   tryCatch(
     {
-      resp <- httr2::request(paste0(base, "/auth/v1/", path)) |>
-        httr2::req_headers(
-          apikey = Sys.getenv("SUPABASE_PUBLISHABLE_KEY"),
-          "Content-Type" = "application/json"
-        ) |>
-        httr2::req_body_json(list(email = email, password = password)) |>
-        httr2::req_error(is_error = function(r) FALSE) |>
-        perform()
-      .gotrue_parse(httr2::resp_body_json(resp))
+      con <- connect()
+      on.exit(DBI::dbDisconnect(con), add = TRUE)
+      row <- DBI::dbGetQuery(
+        con,
+        "select id, is_admin from users
+           where username = $1 and password_hash = crypt($2, password_hash)",
+        params = list(username, password)
+      )
+      if (nrow(row) != 1) {
+        return(.auth_error("invalid_credentials"))
+      }
+      list(
+        ok = TRUE,
+        user_id = row$id[[1]],
+        is_admin = isTRUE(row$is_admin[[1]]),
+        error = NA_character_
+      )
     },
     error = function(e) .auth_error("Could not reach the sign-in service.")
   )
 }
 
-gotrue_sign_in <- function(email, password, perform = httr2::req_perform) {
-  .gotrue_request("token?grant_type=password", email, password, perform)
-}
-gotrue_sign_up <- function(email, password, perform = httr2::req_perform) {
-  .gotrue_request("signup", email, password, perform)
+db_sign_up <- function(username, password, connect = supabase_connect) {
+  if (!.valid_username(username)) {
+    return(.auth_error("username_invalid"))
+  }
+  if (!is.character(password) || length(password) != 1 ||
+      is.na(password) || nchar(password) < 6) {
+    return(.auth_error("password_too_short"))
+  }
+  tryCatch(
+    {
+      con <- connect()
+      on.exit(DBI::dbDisconnect(con), add = TRUE)
+      taken <- DBI::dbGetQuery(
+        con,
+        "select 1 from users where username = $1",
+        params = list(username)
+      )
+      if (nrow(taken) > 0) {
+        return(.auth_error("username_taken"))
+      }
+      row <- DBI::dbGetQuery(
+        con,
+        "insert into users (username, password_hash)
+           values ($1, crypt($2, gen_salt('bf')))
+           returning id, is_admin",
+        params = list(username, password)
+      )
+      list(
+        ok = TRUE,
+        user_id = row$id[[1]],
+        is_admin = isTRUE(row$is_admin[[1]]),
+        error = NA_character_
+      )
+    },
+    error = function(e) .auth_error("Could not reach the sign-in service.")
+  )
 }

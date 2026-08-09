@@ -16,7 +16,7 @@ test_that("guest identity yields a guest storage and no connection", {
   sf <- storage_for_identity(list(
     mode = "guest",
     user_id = NA_character_,
-    access_token = NA_character_
+    is_admin = FALSE
   ))
   expect_null(sf$con)
   expect_true(is.function(sf$storage$create_game))
@@ -28,7 +28,7 @@ test_that("user identity without supabase config falls back to guest (no DB need
   sf <- storage_for_identity(list(
     mode = "user",
     user_id = "u1",
-    access_token = "t1"
+    is_admin = FALSE
   ))
   expect_null(sf$con)
   expect_true(is.function(sf$storage$create_game))

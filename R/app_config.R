@@ -135,12 +135,14 @@ APP_CONFIG$outcome_codes <- names(APP_CONFIG$outcome_meta)
 
 # Supabase table names (Postgres), one source of truth.
 DB_TABLES <- list(
-  profiles = "profiles",
+  users = "users",
   leagues = "leagues",
+  league_members = "league_members",
   rulesets = "rulesets",
   teams = "teams",
   players = "players",
   games = "games",
+  game_shares = "game_shares",
   game_events = "game_events",
   plate_appearances = "plate_appearances"
 )

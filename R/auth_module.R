@@ -10,7 +10,7 @@ auth_ui <- function(id) {
         "but it will be lost when you refresh."
       )
     },
-    textInput(ns("email"), "Email"),
+    textInput(ns("username"), "Username"),
     passwordInput(ns("password"), "Password"),
     div(
       class = "d-flex gap-2 flex-wrap",
@@ -46,26 +46,26 @@ auth_ui <- function(id) {
 
 auth_server <- function(
   id,
-  sign_in = gotrue_sign_in,
-  sign_up = gotrue_sign_up
+  sign_in = db_sign_in,
+  sign_up = db_sign_up
 ) {
   moduleServer(id, function(input, output, session) {
     identity <- reactiveVal(list(
       mode = NA_character_,
       user_id = NA_character_,
-      access_token = NA_character_
+      is_admin = FALSE
     ))
     err <- reactiveVal("")
 
     handle <- function(fn) {
-      res <- tryCatch(fn(input$email, input$password), error = function(e) {
+      res <- tryCatch(fn(input$username, input$password), error = function(e) {
         list(ok = FALSE, error = "Could not reach the sign-in service.")
       })
       if (isTRUE(res$ok)) {
         identity(list(
           mode = "user",
           user_id = res$user_id,
-          access_token = res$access_token
+          is_admin = isTRUE(res$is_admin)
         ))
         err("")
       } else {
@@ -79,7 +79,7 @@ auth_server <- function(
       identity(list(
         mode = "guest",
         user_id = NA_character_,
-        access_token = NA_character_
+        is_admin = FALSE
       ))
     )
 
