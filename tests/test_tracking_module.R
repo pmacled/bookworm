@@ -101,6 +101,54 @@ test_that("run-only half: entering runs advances the half via storage", {
   )
 })
 
+test_that("resuming a game with existing events does not re-append the start event", {
+  st <- make_storage("guest")
+  gid <- st$create_game(list(name = "T"))
+  # Pre-seed the log so the game already exists.
+  st$append_event(gid, start)
+  expect_equal(length(st$load_events(gid)), 1L)
+
+  testServer(
+    tracking_server,
+    args = list(
+      storage = st,
+      game_id = gid,
+      game_start_event = NULL,
+      read_only = FALSE
+    ),
+    {
+      session$flushReact()
+      # No extra start event appended; events load as-is.
+      expect_equal(length(events()), 1L)
+      expect_equal(state()$status, "in_progress")
+    }
+  )
+})
+
+test_that("read-only mode suppresses outcome recording", {
+  st <- make_storage("guest")
+  gid <- st$create_game(list(name = "T"))
+  st$append_event(gid, start)
+
+  testServer(
+    tracking_server,
+    args = list(
+      storage = st,
+      game_id = gid,
+      game_start_event = NULL,
+      read_only = TRUE
+    ),
+    {
+      session$flushReact()
+      before <- length(events())
+      session$setInputs(o_1B = 1) # would record a hit if editable
+      session$flushReact()
+      expect_equal(length(events()), before) # unchanged
+      expect_null(output$secondary_actions)
+    }
+  )
+})
+
 test_that("undo then record does not resurrect the undone event", {
   st <- make_storage("guest")
   gid <- st$create_game(list(name = "T"))

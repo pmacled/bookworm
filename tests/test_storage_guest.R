@@ -32,3 +32,24 @@ test_that("guest storage lists games", {
   st$create_game(list(name = "G1"))
   expect_equal(nrow(st$list_games()), 1L)
 })
+
+test_that("guest storage deletes a game and its events", {
+  st <- make_storage("guest")
+  gid <- st$create_game(list(name = "G1"))
+  st$append_event(
+    gid,
+    new_event("count_override", list(balls = 0L, strikes = 0L))
+  )
+  expect_equal(nrow(st$list_games()), 1L)
+  expect_true(st$delete_game(gid))
+  expect_equal(nrow(st$list_games()), 0L)
+  expect_equal(length(st$load_events(gid)), 0L)
+})
+
+test_that("guest list_games includes team and can_delete columns", {
+  st <- make_storage("guest")
+  st$create_game(list(name = "G1"))
+  lg <- st$list_games()
+  expect_true(all(c("home_team", "away_team", "can_delete") %in% names(lg)))
+  expect_true(all(lg$can_delete))
+})

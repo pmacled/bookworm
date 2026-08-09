@@ -34,6 +34,11 @@ make_storage <- function(
     },
     load_events = function(game_id) env$events[[game_id]] %||% list(),
     save_snapshot = function(game_id, state) invisible(NULL),
+    delete_game = function(game_id, user_id = NULL) {
+      env$games[[game_id]] <- NULL
+      env$events[[game_id]] <- NULL
+      invisible(TRUE)
+    },
     list_games = function() {
       if (length(env$games) == 0) {
         return(data.frame(
@@ -41,13 +46,20 @@ make_storage <- function(
           name = character(),
           status = character(),
           updated_at = character(),
-          relationship = character()
+          relationship = character(),
+          home_team = character(),
+          away_team = character(),
+          can_delete = logical()
         ))
       }
       do.call(
         rbind,
         lapply(env$games, function(g) {
           g$relationship <- "owned"
+          g$home_team <- g$home_team %||% NA_character_
+          g$away_team <- g$away_team %||% NA_character_
+          # Guests own everything in their in-memory session.
+          g$can_delete <- TRUE
           as.data.frame(g, stringsAsFactors = FALSE)
         })
       )
@@ -132,6 +144,23 @@ make_storage <- function(
       )
       invisible(NULL)
     },
+    delete_game = function(game_id, delete_user_id = user_id) {
+      # Ownership rule: a user may delete a game they own directly, and a
+      # league owner may delete games assigned to a league they own. Enforced
+      # in the WHERE clause so a non-owner's request affects zero rows. Event
+      # rows cascade-delete via the games FK.
+      n <- DBI::dbExecute(
+        con,
+        "delete from games g
+          where g.id = $1
+            and (g.owner_id = $2
+                 or exists (select 1 from leagues l
+                             where l.id = g.league_id
+                               and l.owner_id = $2))",
+        params = list(game_id, delete_user_id)
+      )
+      invisible(n > 0)
+    },
     list_games = function() {
       # Surface every game the user may view:
       #   * games they own directly
@@ -139,24 +168,30 @@ make_storage <- function(
       #   * games shared with them directly (game_shares)
       # `relationship` lets the UI distinguish these; ordered owned > league >
       # shared so a game the user owns is labeled as owned even if it also
-      # matches via league or share.
+      # matches via league or share. `can_delete` is true when the user owns the
+      # game or owns its league.
       DBI::dbGetQuery(
         con,
         "select g.id as game_id,
                 coalesce(g.location, 'Game') as name,
                 g.status,
                 g.updated_at::text as updated_at,
+                ht.name as home_team,
+                at.name as away_team,
                 case
                   when g.owner_id = $1 then 'owned'
                   when l.id is not null then 'league'
                   else 'shared'
-                end as relationship
+                end as relationship,
+                (g.owner_id = $1 or l.owner_id = $1) as can_delete
            from games g
            left join leagues l
              on l.id = g.league_id
             and (l.owner_id = $1
                  or exists (select 1 from league_members m
                              where m.league_id = l.id and m.user_id = $1))
+           left join teams ht on ht.id = g.home_team_id
+           left join teams at on at.id = g.away_team_id
            left join game_shares s
              on s.game_id = g.id and s.user_id = $1
           where g.owner_id = $1

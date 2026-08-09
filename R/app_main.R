@@ -43,6 +43,7 @@ bookworm_ui <- function() {
     navset_hidden(
       id = "screen",
       nav_panel_hidden("auth", div(class = "p-3", auth_ui("auth"))),
+      nav_panel_hidden("home", div(class = "p-3", home_ui("home"))),
       nav_panel_hidden("setup", div(class = "p-3", setup_ui("setup"))),
       nav_panel_hidden("track", div(class = "p-2", tracking_ui("track")))
     )
@@ -55,6 +56,16 @@ bookworm_server <- function(input, output, session) {
   game_start <- setup_server("setup")
 
   degraded <- reactiveVal(NULL)
+  # Bumped to prompt the home screen to re-fetch its games list (after creating
+  # or opening/updating a game, or when navigating back home).
+  home_refresh <- reactiveVal(0L)
+
+  home <- home_server(
+    "home",
+    storage_r = store,
+    identity_r = identity,
+    refresh_r = home_refresh
+  )
 
   observeEvent(
     identity(),
@@ -66,7 +77,37 @@ bookworm_server <- function(input, output, session) {
       if (!is.null(sf$con)) {
         onStop(function() DBI::dbDisconnect(sf$con))
       }
+      home_refresh(isolate(home_refresh()) + 1L)
+      nav_select("screen", "home")
+    },
+    ignoreInit = TRUE
+  )
+
+  # New game: go to the setup flow. Opening an existing game: bootstrap tracking
+  # for that game (no start event, so events load as-is) and view final games
+  # read-only.
+  observeEvent(
+    home$new_game(),
+    {
+      req(store())
       nav_select("screen", "setup")
+    },
+    ignoreInit = TRUE
+  )
+
+  observeEvent(
+    home$open_game(),
+    {
+      og <- home$open_game()
+      req(store(), og)
+      tracking_server(
+        "track",
+        store(),
+        og$game_id,
+        game_start_event = NULL,
+        read_only = identical(og$status, "final")
+      )
+      nav_select("screen", "track")
     },
     ignoreInit = TRUE
   )
@@ -81,12 +122,21 @@ bookworm_server <- function(input, output, session) {
       "Sign out",
       class = "btn-sm btn-outline-secondary ms-auto"
     )
+    home_btn <- actionButton(
+      "go_home",
+      "Home",
+      class = "btn-sm btn-outline-secondary"
+    )
     if (!is.null(degraded())) {
       div(class = "alert alert-danger m-2 py-2 small", degraded())
     } else if (identical(id$mode, "guest")) {
       div(
-        class = "alert alert-warning m-2 py-2 small",
-        "Guest mode: sign in to save. Refreshing will lose this game."
+        class = "d-flex align-items-center gap-2 m-2 py-2 px-2 alert alert-warning small",
+        tags$span(
+          class = "me-auto",
+          "Guest mode: sign in to save. Refreshing will lose this game."
+        ),
+        home_btn
       )
     } else if (identical(id$mode, "user")) {
       div(
@@ -95,6 +145,7 @@ bookworm_server <- function(input, output, session) {
           "Signed in",
           if (!is.null(id$username)) paste0(" as ", id$username) else ""
         ),
+        home_btn,
         sign_out_btn
       )
     }
@@ -118,8 +169,15 @@ bookworm_server <- function(input, output, session) {
       req(store(), game_start())
       gid <- store()$create_game(list(name = "Game"))
       tracking_server("track", store(), gid, game_start())
+      home_refresh(isolate(home_refresh()) + 1L)
       nav_select("screen", "track")
     },
     ignoreInit = TRUE
   )
+
+  # Return to the games list from anywhere.
+  observeEvent(input$go_home, {
+    home_refresh(isolate(home_refresh()) + 1L)
+    nav_select("screen", "home")
+  })
 }

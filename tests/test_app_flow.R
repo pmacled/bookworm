@@ -180,3 +180,44 @@ test_that("a ruleset change that flips genderless-ness clears stale rows so no p
     expect_equal(length(lu), 0L)
   })
 })
+
+test_that("after starting a game, it appears in the home games list", {
+  testServer(bookworm_server, {
+    session$flushReact()
+    session$setInputs(`auth-do_guest` = 1)
+    session$setInputs(
+      `setup-preset` = "anything_goes",
+      `setup-start_balls` = 1,
+      `setup-start_strikes` = 1,
+      `setup-foul_out` = "out",
+      `setup-gender_rule` = "none",
+      `setup-gender_n` = 2,
+      `setup-min_females` = 0,
+      `setup-innings` = 7,
+      `setup-fielder_count` = 0,
+      `setup-run_cap` = 0,
+      `setup-open_last` = TRUE,
+      `setup-cap_same_play` = TRUE,
+      `setup-cap_ends_half` = TRUE,
+      `setup-mercy_diff_1` = 0,
+      `setup-mercy_diff_2` = 0,
+      `setup-mercy_diff_3` = 0,
+      `setup-hr_limit` = 0,
+      `setup-hr_limit_m` = 0,
+      `setup-hr_limit_f` = 0,
+      `setup-hr_over` = "out",
+      `setup-hr_itp_counts` = FALSE,
+      `setup-pr_inning` = 0,
+      `setup-pr_game` = 0,
+      `setup-pr_player` = 0,
+      `setup-pr_elig` = "anyone",
+      `setup-pr_for` = "anyone",
+      `setup-away_name` = "Away",
+      `setup-home_name` = "Home"
+    )
+    session$setInputs(`setup-start` = 1)
+    # The guest storage is shared across the top-level server and the home
+    # module, so the freshly created game is visible via list_games().
+    expect_equal(nrow(store()$list_games()), 1L)
+  })
+})

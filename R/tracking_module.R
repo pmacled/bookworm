@@ -119,20 +119,7 @@ tracking_ui <- function(id) {
   tagList(
     uiOutput(ns("situation")),
     uiOutput(ns("action_panel")),
-    div(
-      class = "d-flex gap-2 mt-2 bw-secondary-actions",
-      actionButton(ns("undo"), "Undo", class = "btn-sm btn-outline-warning"),
-      actionButton(
-        ns("sub"),
-        "Substitution",
-        class = "btn-sm btn-outline-secondary"
-      ),
-      actionButton(
-        ns("edit_lineup"),
-        "Edit lineup",
-        class = "btn-sm btn-outline-secondary"
-      )
-    ),
+    uiOutput(ns("secondary_actions")),
     navset_tab(
       nav_panel(
         "Scorebook",
@@ -163,14 +150,49 @@ tracking_ui <- function(id) {
   )
 }
 
-tracking_server <- function(id, storage, game_id, game_start_event) {
+tracking_server <- function(
+  id,
+  storage,
+  game_id,
+  game_start_event = NULL,
+  read_only = FALSE
+) {
   moduleServer(id, function(input, output, session) {
     events <- reactiveVal(NULL)
     isolate({
-      appended <- storage$append_event(game_id, game_start_event)
-      events(storage$load_events(game_id))
+      existing <- storage$load_events(game_id)
+      # New game: seed the start event, but only if the log is empty so a
+      # resume/open path never double-appends. Resume/view: load as-is.
+      if (!is.null(game_start_event) && length(existing) == 0) {
+        storage$append_event(game_id, game_start_event)
+        existing <- storage$load_events(game_id)
+      }
+      events(existing)
     })
     state <- reactive(fold_events(events()))
+
+    # Secondary actions and all mutation paths are suppressed in read-only mode
+    # (used when a game is final / not editable by the viewer).
+    output$secondary_actions <- renderUI({
+      if (isTRUE(read_only)) {
+        return(NULL)
+      }
+      ns <- session$ns
+      div(
+        class = "d-flex gap-2 mt-2 bw-secondary-actions",
+        actionButton(ns("undo"), "Undo", class = "btn-sm btn-outline-warning"),
+        actionButton(
+          ns("sub"),
+          "Substitution",
+          class = "btn-sm btn-outline-secondary"
+        ),
+        actionButton(
+          ns("edit_lineup"),
+          "Edit lineup",
+          class = "btn-sm btn-outline-secondary"
+        )
+      )
+    })
 
     shown_violation_sig <- reactiveVal("")
     shown_notice_codes <- reactiveVal(character())
@@ -212,6 +234,9 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
     }
 
     record <- function(outcome) {
+      if (isTRUE(read_only)) {
+        return(invisible())
+      }
       s <- isolate(state())
       if (identical(s$status, "final")) {
         return(invisible())
@@ -270,6 +295,12 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
 
     output$action_panel <- renderUI({
       s <- state()
+      if (isTRUE(read_only)) {
+        return(div(
+          class = "p-2 text-muted small",
+          "This game is read-only."
+        ))
+      }
       if (.batting_team_has_lineup(s)) {
         outcome_button_grid(session$ns)
       } else {
