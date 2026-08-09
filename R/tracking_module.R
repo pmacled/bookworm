@@ -413,27 +413,7 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
       ignoreInit = TRUE
     )
 
-    output$situation <- renderUI({
-      s <- state()
-      tags$div(
-        class = "d-flex justify-content-between align-items-center",
-        tags$div(sprintf(
-          "Inning %d %s • %d out • %d-%d",
-          s$inning,
-          s$half,
-          s$outs,
-          s$count$balls,
-          s$count$strikes
-        )),
-        tags$div(sprintf(
-          "%s: away %d – home %d",
-          if (identical(s$status, "final")) "FINAL" else "Score",
-          s$score$away,
-          s$score$home
-        )),
-        if (!is.null(s$current_batter)) tags$strong(s$current_batter$name)
-      )
-    })
+    output$situation <- renderUI(situation_card_ui(state()))
     output$scorebook <- renderUI({
       s <- state()
       team <- input$sb_team %||% "away"

@@ -60,3 +60,21 @@ test_that("an empty lineup (run-only team) still yields all eight columns", {
   expect_equal(nrow(df), 0L)
   expect_identical(names(df), c("Order", "Player", "AB", "R", "H", "RBI", "BB", "K"))
 })
+
+test_that("batting_line_for returns one player's accumulated line", {
+  st <- initial_game_state()
+  st$lineups$away <- list(make_player("a1", "Ann", "F", 7L, 1L, "SS"))
+  st$pa_log <- list(
+    list(team = "away", batter_id = "a1", outcome = "2B", rbi = 2L, reached = 2L),
+    list(team = "away", batter_id = "a1", outcome = "BB", rbi = 0L, reached = 1L))
+  l <- batting_line_for(st, "away", "a1")
+  expect_equal(l$AB, 1L)
+  expect_equal(l$H, 1L)
+  expect_equal(l$RBI, 2L)
+  expect_equal(l$BB, 1L)
+})
+
+test_that("batting_line_for returns NULL for an unknown player", {
+  st <- initial_game_state()
+  expect_null(batting_line_for(st, "away", "nobody"))
+})

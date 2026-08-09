@@ -36,3 +36,25 @@
 
 /* Scorebook: horizontal scroll on narrow screens; the svg carries its own grid. */
 .bw-scorebook svg { display: block; }
+
+/* Situation card: score and count carry the most weight — they are what a scorer
+   looks at between every pitch. */
+.bw-situation { border-color: var(--bs-border-color); }
+.bw-score-side { text-align: center; min-width: 5.5rem; }
+.bw-score-side .bw-team { font-size: .75rem; text-transform: uppercase;
+  letter-spacing: .04em; color: var(--bs-secondary); }
+.bw-score-side .bw-runs { font-size: 2rem; line-height: 1; font-weight: 700;
+  font-variant-numeric: tabular-nums; }
+.bw-score-side.bw-batting .bw-team { color: var(--bs-primary); font-weight: 700; }
+.bw-sit-mid .bw-inning { font-size: .95rem; font-weight: 600; }
+.bw-sit-mid .bw-count { font-size: 1.6rem; font-weight: 700; line-height: 1.1;
+  font-variant-numeric: tabular-nums; }
+.bw-sit-mid .bw-outs { font-size: .8rem; }
+.bw-sit-mid .bw-final { font-size: 1.3rem; font-weight: 700;
+  letter-spacing: .08em; color: var(--bs-danger); }
+.bw-sit-batter { border-top: 1px solid var(--bs-border-color); padding-top: .35rem; }
+.bw-batter-name { font-weight: 700; }
+@media (max-width: 375px) {
+  .bw-score-side .bw-runs { font-size: 1.6rem; }
+  .bw-sit-mid .bw-count { font-size: 1.3rem; }
+}
