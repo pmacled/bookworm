@@ -130,7 +130,20 @@ tracking_ui <- function(id) {
       )
     ),
     navset_tab(
-      nav_panel("Scorebook", uiOutput(ns("scorebook"))),
+      nav_panel(
+        "Scorebook",
+        div(
+          class = "p-2",
+          radioButtons(
+            ns("sb_team"),
+            NULL,
+            c("Away" = "away", "Home" = "home"),
+            selected = "away",
+            inline = TRUE
+          ),
+          uiOutput(ns("scorebook"))
+        )
+      ),
       nav_panel(
         "Box score",
         div(
@@ -421,10 +434,33 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
         if (!is.null(s$current_batter)) tags$strong(s$current_batter$name)
       )
     })
-    output$scorebook <- renderUI(render_scorebook_svg(
-      state(),
-      state()$batting_team
-    ))
+    output$scorebook <- renderUI({
+      s <- state()
+      team <- input$sb_team %||% "away"
+      cb <- if (identical(team, s$batting_team)) {
+        s$current_batter$player_id
+      } else {
+        NULL
+      }
+      render_scorebook_svg(s, team, current_batter_id = cb)
+    })
+
+    observeEvent(
+      state()$teams,
+      {
+        t <- state()$teams
+        updateRadioButtons(
+          session,
+          "sb_team",
+          choiceNames = c(t$away$name %||% "Away", t$home$name %||% "Home"),
+          choiceValues = c("away", "home"),
+          selected = isolate(input$sb_team) %||% "away",
+          inline = TRUE
+        )
+      },
+      ignoreInit = TRUE,
+      once = TRUE
+    )
     .box_dt <- function(team) {
       DT::renderDT({
         DT::datatable(

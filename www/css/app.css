@@ -33,3 +33,6 @@
 @media (max-width: 576px) {
   .bw-disp-row { flex-direction: column; align-items: flex-start !important; gap: .1rem; }
 }
+
+/* Scorebook: horizontal scroll on narrow screens; the svg carries its own grid. */
+.bw-scorebook svg { display: block; }
