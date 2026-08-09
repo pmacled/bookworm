@@ -85,9 +85,14 @@ create table if not exists teams (
   id uuid primary key default gen_random_uuid(),
   league_id uuid not null references leagues(id) on delete cascade,
   name text not null check (char_length(name) > 0),
+  -- The team's captain: a user who can manage that team's players. Setting a
+  -- captain also adds them to league_members so they can view league games.
+  -- Null-out on user delete so the team survives its captain leaving.
+  captain_user_id uuid references users(id) on delete set null,
   created_at timestamptz not null default now(),
   unique (league_id, name)
 );
+create index if not exists idx_teams_captain on teams(captain_user_id);
 
 create table if not exists players (
   id uuid primary key default gen_random_uuid(),
@@ -253,3 +258,13 @@ create trigger trg_users_reassign_or_purge_games
 -- (owner_id = signed-in user, plus league membership and game_shares) is
 -- enforced in the R application layer. Keep the service key server-side only (Posit Connect
 -- Cloud secrets); never ship it to the client.
+
+-- ---------------------------------------------------------------------------
+-- Incremental migrations (safe to re-run; for deployments created before a
+-- column existed). The create-table blocks above are the source of truth for
+-- fresh installs; these keep an already-provisioned database in sync.
+-- ---------------------------------------------------------------------------
+-- teams.captain_user_id (added for team-captain management).
+alter table teams
+  add column if not exists captain_user_id uuid references users(id) on delete set null;
+create index if not exists idx_teams_captain on teams(captain_user_id);

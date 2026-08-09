@@ -44,6 +44,7 @@ bookworm_ui <- function() {
       id = "screen",
       nav_panel_hidden("auth", div(class = "p-3", auth_ui("auth"))),
       nav_panel_hidden("home", div(class = "p-3", home_ui("home"))),
+      nav_panel_hidden("manage", div(class = "p-3", manage_ui("manage"))),
       nav_panel_hidden("setup", div(class = "p-3", setup_ui("setup"))),
       nav_panel_hidden("track", div(class = "p-2", tracking_ui("track")))
     )
@@ -59,6 +60,9 @@ bookworm_server <- function(input, output, session) {
   # Bumped to prompt the home screen to re-fetch its games list (after creating
   # or opening/updating a game, or when navigating back home).
   home_refresh <- reactiveVal(0L)
+  # The live DB connection when signed in with persistence (NULL for guest or
+  # degraded mode); the management screen needs it directly.
+  db_con <- reactiveVal(NULL)
 
   home <- home_server(
     "home",
@@ -67,12 +71,19 @@ bookworm_server <- function(input, output, session) {
     refresh_r = home_refresh
   )
 
+  manage_server(
+    "manage",
+    con_r = db_con,
+    identity_r = identity
+  )
+
   observeEvent(
     identity(),
     {
       req(!is.na(identity()$mode))
       sf <- storage_for_identity(identity())
       store(sf$storage)
+      db_con(sf$con)
       degraded(if (isTRUE(sf$degraded)) sf$reason else NULL)
       if (!is.null(sf$con)) {
         onStop(function() DBI::dbDisconnect(sf$con))
@@ -91,6 +102,23 @@ bookworm_server <- function(input, output, session) {
     {
       req(store())
       nav_select("screen", "setup")
+    },
+    ignoreInit = TRUE
+  )
+
+  observeEvent(
+    home$manage(),
+    {
+      # Management needs a live DB connection; guests / degraded mode have none.
+      if (is.null(db_con())) {
+        showNotification(
+          "Sign in with saving enabled to manage leagues and teams.",
+          type = "warning",
+          duration = 4
+        )
+        return(invisible())
+      }
+      nav_select("screen", "manage")
     },
     ignoreInit = TRUE
   )
@@ -157,6 +185,7 @@ bookworm_server <- function(input, output, session) {
     {
       if (is.na(identity()$mode)) {
         store(NULL)
+        db_con(NULL)
         nav_select("screen", "auth")
       }
     },

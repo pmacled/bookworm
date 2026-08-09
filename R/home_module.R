@@ -88,7 +88,11 @@ home_ui <- function(id) {
     div(
       class = "d-flex align-items-center justify-content-between mb-3",
       tags$h3(class = "m-0", "Your games"),
-      actionButton(ns("new_game"), "New game", class = "btn-primary")
+      div(
+        class = "d-flex gap-2",
+        uiOutput(ns("manage_btn"), inline = TRUE),
+        actionButton(ns("new_game"), "New game", class = "btn-primary")
+      )
     ),
     uiOutput(ns("filter")),
     uiOutput(ns("games")),
@@ -138,6 +142,14 @@ home_server <- function(id, storage_r, identity_r, refresh_r = reactive(NULL)) {
         selected = "all",
         inline = TRUE
       )
+    })
+
+    # Management requires a persistent account (leagues/teams live in the DB),
+    # so only surface the Manage button to signed-in users.
+    output$manage_btn <- renderUI({
+      if (identical(identity_r()$mode, "user")) {
+        actionButton(ns("manage"), "Manage", class = "btn-outline-secondary")
+      }
     })
 
     output$empty <- renderUI({
@@ -270,6 +282,7 @@ home_server <- function(id, storage_r, identity_r, refresh_r = reactive(NULL)) {
 
     list(
       new_game = reactive(input$new_game),
+      manage = reactive(input$manage),
       open_game = open_game
     )
   })
