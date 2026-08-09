@@ -34,8 +34,20 @@ validate_lineup <- function(cfg, lineup, team_label) {
   ))]
 
   bs <- cfg$batting_size
-  # batting_size is a maximum: a short lineup is fine, only an oversized one warns.
-  if (!is.na(bs) && length(batters) > bs) {
+  rule <- cfg$batting_size_rule %||% "max"
+  if (!is.na(bs) && identical(rule, "exact") && length(batters) != bs) {
+    # An exact-size ruleset requires precisely `bs` batters; anything else blocks.
+    add(
+      "violation",
+      "batting_size",
+      sprintf(
+        "%d batters entered; this ruleset requires exactly %d.",
+        length(batters),
+        bs
+      )
+    )
+  } else if (!is.na(bs) && length(batters) > bs) {
+    # batting_size is a maximum: a short lineup is fine, only an oversized one warns.
     add(
       "notice",
       "batting_size",

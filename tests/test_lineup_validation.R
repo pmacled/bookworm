@@ -63,8 +63,9 @@ test_that("an empty lineup is legal and reported as run-only", {
 })
 
 test_that("batting_size is a maximum: a short lineup is fine, an oversized one warns", {
-  cfg <- preset_ruleset("standard_baseball") # batting_size 9
-  # Under a size-9 rule, 2 batters is allowed (short lineups are always legal).
+  cfg <- preset_ruleset("standard_slowpitch") # size rule defaults to max
+  cfg$batting_size <- 9L
+  # Under a size-9 max rule, 2 batters is allowed (short lineups are always legal).
   short <- validate_lineup(
     cfg,
     lineup_of(pl("1", "A", "M"), pl("2", "B", "M")),
@@ -82,6 +83,32 @@ test_that("batting_size is a maximum: a short lineup is fine, an oversized one w
   expect_equal(msgs(big), "10 batters entered; this ruleset allows at most 9.")
   expect_equal(big$items[[1]]$severity, "notice")
   expect_true(big$ok)
+})
+
+test_that("batting_size_rule 'exact' requires precisely batting_size batters and blocks otherwise", {
+  cfg <- preset_ruleset("standard_baseball") # batting_size 9, rule "exact"
+  expect_identical(cfg$batting_size_rule, "exact")
+  # A short lineup is now a blocking violation, not a free pass.
+  short <- validate_lineup(
+    cfg,
+    lineup_of(pl("1", "A", "M"), pl("2", "B", "M")),
+    "Away"
+  )
+  expect_equal(codes(short), "batting_size")
+  expect_equal(short$items[[1]]$severity, "violation")
+  expect_false(short$ok)
+  expect_equal(
+    msgs(short),
+    "2 batters entered; this ruleset requires exactly 9."
+  )
+  # Exactly nine passes cleanly.
+  ok_lu <- do.call(
+    lineup_of,
+    lapply(1:9, function(i) pl(as.character(i), LETTERS[i], "M"))
+  )
+  ok <- validate_lineup(cfg, ok_lu, "Away")
+  expect_false("batting_size" %in% codes(ok))
+  expect_true(ok$ok)
 })
 
 test_that("duplicate jersey numbers are flagged", {

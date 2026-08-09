@@ -132,6 +132,7 @@ collect_ruleset <- function(input) {
       }
     ),
     batting_size = as.integer(input$batting_size %||% "0"), # selectInput string; coerce maps 0/NA => unlimited
+    batting_size_rule = input$batting_size_rule %||% "max",
     fielding = fielding,
     innings = input$innings,
     run_cap = list(
@@ -260,6 +261,17 @@ setup_ui <- function(id) {
             ns("batting_size"),
             "Number of batters",
             c("Unlimited (everyone bats)" = "0", "9" = "9", "10" = "10")
+          ),
+          conditionalPanel(
+            sprintf("input['%s'] != '0'", ns("batting_size")),
+            selectInput(
+              ns("batting_size_rule"),
+              "Batting size enforcement",
+              c(
+                "Maximum (short lineups allowed)" = "max",
+                "Exact (must match exactly)" = "exact"
+              )
+            )
           ),
           selectInput(
             ns("gender_rule"),
@@ -629,6 +641,11 @@ setup_server <- function(id) {
           selected = as.character(
             if (is.na(cfg$batting_size)) 0L else cfg$batting_size
           )
+        )
+        updateSelectInput(
+          session,
+          "batting_size_rule",
+          selected = cfg$batting_size_rule %||% "max"
         )
         updateSelectInput(
           session,

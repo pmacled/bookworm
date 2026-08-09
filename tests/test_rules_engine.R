@@ -9,10 +9,13 @@ test_that("default config is valid", {
 })
 
 test_that("coerce merges partial over defaults", {
-  cfg <- coerce_ruleset_config(list(innings = 5, starting_count = list(balls = 0, strikes = 2)))
+  cfg <- coerce_ruleset_config(list(
+    innings = 5,
+    starting_count = list(balls = 0, strikes = 2)
+  ))
   expect_equal(cfg$innings, 5L)
   expect_equal(cfg$starting_count$strikes, 2L)
-  expect_equal(cfg$foul_out_rule, "unlimited")  # untouched default
+  expect_equal(cfg$foul_out_rule, "unlimited") # untouched default
 })
 
 test_that("validation rejects bad starting count and unknown enums", {
@@ -30,13 +33,15 @@ test_that("validation rejects bad starting count and unknown enums", {
 
   bad3 <- default_ruleset_config()
   bad3$batting_gender_rule$type <- "every_n"
-  bad3$batting_gender_rule$n <- NA_integer_   # every_n requires n
+  bad3$batting_gender_rule$n <- NA_integer_ # every_n requires n
   v3 <- validate_ruleset_config(bad3)
   expect_false(v3$ok)
   # `every_n` is a *legacy* alias: reaching validation un-migrated means both the
   # enum check and the requires-n check must speak up, not just one of them.
-  expect_equal(v3$errors,
-               c("invalid batting_gender_rule type", "every_n batting rule requires n"))
+  expect_equal(
+    v3$errors,
+    c("invalid batting_gender_rule type", "every_n batting rule requires n")
+  )
 })
 
 # --- Finding 2: a cleared numericInput sends NA, and validation must SAY SO, not throw ---
@@ -48,7 +53,7 @@ test_that("a cleared starting count is rejected with a message, not an NA crash"
   for (fld in c("balls", "strikes")) {
     cfg <- default_ruleset_config()
     cfg$starting_count[[fld]] <- NA_integer_
-    v <- validate_ruleset_config(cfg)      # must not error
+    v <- validate_ruleset_config(cfg) # must not error
     expect_false(v$ok, info = fld)
     expect_match(v$errors, sprintf("starting %s", fld), all = FALSE)
   }
@@ -68,7 +73,9 @@ test_that("a zero-length numeric (a NULL input coerced by as.integer) is rejecte
   cfg$starting_count$balls <- integer(0)
   v <- validate_ruleset_config(cfg)
   expect_false(v$ok)
-  expect_true(all(c("starting balls must be 0-3", "innings must be >= 1") %in% v$errors))
+  expect_true(all(
+    c("starting balls must be 0-3", "innings must be >= 1") %in% v$errors
+  ))
 })
 
 test_that("a cleared batting_size is unlimited, not an error", {
@@ -76,6 +83,23 @@ test_that("a cleared batting_size is unlimited, not an error", {
   cfg <- default_ruleset_config()
   cfg$batting_size <- NA_integer_
   expect_true(validate_ruleset_config(cfg)$ok)
+})
+
+test_that("batting_size_rule defaults to \"max\" and rejects unknown values and exact-without-size", {
+  expect_equal(default_ruleset_config()$batting_size_rule, "max")
+  # Unknown values coerce back to "max".
+  expect_equal(
+    coerce_ruleset_config(list(batting_size_rule = "wat"))$batting_size_rule,
+    "max"
+  )
+  # "exact" is only valid alongside a concrete batting_size.
+  bad <- coerce_ruleset_config(list(batting_size_rule = "exact"))
+  expect_false(validate_ruleset_config(bad)$ok)
+  good <- coerce_ruleset_config(list(
+    batting_size_rule = "exact",
+    batting_size = 9L
+  ))
+  expect_true(validate_ruleset_config(good)$ok)
 })
 
 # --- Finding 8: .merge_ruleset() must not drop a key on an explicit NULL ---
@@ -89,8 +113,12 @@ test_that("an explicit NULL override keeps the default instead of deleting the k
   expect_equal(cfg$foul_out_rule, "unlimited")
   expect_true(validate_ruleset_config(cfg)$ok)
 
-  cfg2 <- coerce_ruleset_config(list(male_walk_rule = NULL, short_lineup_auto_out = NULL,
-                                     innings = NULL, home_run_rule = list(over_limit_result = NULL)))
+  cfg2 <- coerce_ruleset_config(list(
+    male_walk_rule = NULL,
+    short_lineup_auto_out = NULL,
+    innings = NULL,
+    home_run_rule = list(over_limit_result = NULL)
+  ))
   expect_equal(cfg2$male_walk_rule, "none")
   expect_false(cfg2$short_lineup_auto_out)
   expect_equal(cfg2$innings, 7L)
@@ -101,8 +129,12 @@ test_that("an explicit NULL override keeps the default instead of deleting the k
 test_that("batting_size defaults to unlimited (NA) and validates", {
   expect_true(is.na(default_ruleset_config()$batting_size))
   expect_equal(coerce_ruleset_config(list(batting_size = 10))$batting_size, 10L)
-  expect_equal(coerce_ruleset_config(list(batting_size = 0))$batting_size, NA_integer_)  # 0 => unlimited
-  bad <- default_ruleset_config(); bad$batting_size <- -3L
+  expect_equal(
+    coerce_ruleset_config(list(batting_size = 0))$batting_size,
+    NA_integer_
+  ) # 0 => unlimited
+  bad <- default_ruleset_config()
+  bad$batting_size <- -3L
   expect_false(validate_ruleset_config(bad)$ok)
 })
 
@@ -120,16 +152,21 @@ test_that("the new default is Anything Goes: 0-0 count, unlimited fouls, no gend
 })
 
 test_that("legacy scalar run-cap keys migrate into run_cap", {
-  cfg <- coerce_ruleset_config(list(run_cap_per_inning = 5L, open_last_inning = FALSE))
+  cfg <- coerce_ruleset_config(list(
+    run_cap_per_inning = 5L,
+    open_last_inning = FALSE
+  ))
   expect_equal(cfg$run_cap$per_inning, 5L)
   expect_false(cfg$run_cap$open_last_inning)
-  expect_true(cfg$run_cap$same_play_runs_count)   # new field takes its default
-  expect_null(cfg$run_cap_per_inning)             # old key is gone, not shadowing
+  expect_true(cfg$run_cap$same_play_runs_count) # new field takes its default
+  expect_null(cfg$run_cap_per_inning) # old key is gone, not shadowing
   expect_true(validate_ruleset_config(cfg)$ok)
 })
 
 test_that("legacy scalar mercy keys migrate into a single tier", {
-  cfg <- coerce_ruleset_config(list(mercy_rule = list(differential = 10L, after_inning = 4L)))
+  cfg <- coerce_ruleset_config(list(
+    mercy_rule = list(differential = 10L, after_inning = 4L)
+  ))
   expect_length(cfg$mercy_rule$tiers, 1L)
   expect_equal(cfg$mercy_rule$tiers[[1]]$differential, 10L)
   expect_equal(cfg$mercy_rule$tiers[[1]]$after_inning, 4L)
@@ -144,25 +181,31 @@ test_that("a legacy mercy differential with no after_inning defaults to inning 1
 })
 
 test_that("legacy batting-gender type names migrate", {
-  a <- coerce_ruleset_config(list(batting_gender_rule = list(type = "no_two_males_consecutive")))
+  a <- coerce_ruleset_config(list(
+    batting_gender_rule = list(type = "no_two_males_consecutive")
+  ))
   expect_equal(a$batting_gender_rule$type, "max_consecutive_males")
   expect_equal(a$batting_gender_rule$n, 1L)
   expect_true(validate_ruleset_config(a)$ok)
 
-  b <- coerce_ruleset_config(list(batting_gender_rule = list(type = "every_other")))
+  b <- coerce_ruleset_config(list(
+    batting_gender_rule = list(type = "every_other")
+  ))
   expect_equal(b$batting_gender_rule$type, "max_consecutive_same_gender")
   expect_equal(b$batting_gender_rule$n, 1L)
   expect_true(validate_ruleset_config(b)$ok)
 
-  c3 <- coerce_ruleset_config(list(batting_gender_rule = list(type = "every_n", n = 4L)))
+  c3 <- coerce_ruleset_config(list(
+    batting_gender_rule = list(type = "every_n", n = 4L)
+  ))
   expect_equal(c3$batting_gender_rule$type, "min_females_per_n")
   expect_equal(c3$batting_gender_rule$n, 4L)
   expect_true(validate_ruleset_config(c3)$ok)
 })
 
 test_that("the legacy courtesy_runner boolean migrates", {
-  on  <- coerce_ruleset_config(list(courtesy_runner = TRUE))
-  expect_true(is.na(on$pinch_runner$max_per_game))     # unlimited
+  on <- coerce_ruleset_config(list(courtesy_runner = TRUE))
+  expect_true(is.na(on$pinch_runner$max_per_game)) # unlimited
   expect_null(on$courtesy_runner)
   expect_true(validate_ruleset_config(on)$ok)
 
@@ -187,12 +230,15 @@ test_that("coercing an empty or NULL config returns full, valid defaults", {
   # Regression: an empty top-level list has no names either, so the same
   # "unnamed list -> replace wholesale" rule that correctly replaces `tiers`
   # was, before the fix, also nuking the *entire* default config to list().
-  for (cfg in list(coerce_ruleset_config(list()), coerce_ruleset_config(NULL))) {
+  for (cfg in list(
+    coerce_ruleset_config(list()),
+    coerce_ruleset_config(NULL)
+  )) {
     expect_equal(cfg$preset, "anything_goes")
     expect_equal(cfg$foul_out_rule, "unlimited")
     expect_equal(cfg$male_walk_rule, "none")
     expect_false(cfg$short_lineup_auto_out)
-    expect_length(cfg, 13L)
+    expect_length(cfg, 14L)
     expect_true(validate_ruleset_config(cfg)$ok)
   }
 })
@@ -205,9 +251,11 @@ test_that("an explicitly empty fielding override keeps the rest of the fielding 
 })
 
 test_that("migration is idempotent", {
-  once  <- coerce_ruleset_config(list(run_cap_per_inning = 5L,
-             mercy_rule = list(differential = 10L, after_inning = 4L),
-             batting_gender_rule = list(type = "every_other")))
+  once <- coerce_ruleset_config(list(
+    run_cap_per_inning = 5L,
+    mercy_rule = list(differential = 10L, after_inning = 4L),
+    batting_gender_rule = list(type = "every_other")
+  ))
   twice <- coerce_ruleset_config(once)
   expect_identical(once, twice)
   expect_true(validate_ruleset_config(once)$ok)
@@ -223,11 +271,11 @@ test_that("validation rejects the new enums", {
   expect_false(validate_ruleset_config(bad2)$ok)
 
   bad3 <- default_ruleset_config()
-  bad3$batting_gender_rule$type <- "max_consecutive_males"   # requires n
+  bad3$batting_gender_rule$type <- "max_consecutive_males" # requires n
   bad3$batting_gender_rule$n <- NA_integer_
   expect_false(validate_ruleset_config(bad3)$ok)
 
   bad4 <- default_ruleset_config()
-  bad4$mercy_rule$tiers <- list(list(after_inning = 3L))     # missing differential
+  bad4$mercy_rule$tiers <- list(list(after_inning = 3L)) # missing differential
   expect_false(validate_ruleset_config(bad4)$ok)
 })

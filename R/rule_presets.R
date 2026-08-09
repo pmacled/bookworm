@@ -40,6 +40,7 @@ RULE_PRESETS <- list(
     config = list(
       innings = 9L,
       batting_size = 9L,
+      batting_size_rule = "exact",
       fielding = list(fielder_count = 9L)
     )
   ),
@@ -63,6 +64,7 @@ RULE_PRESETS <- list(
     config = list(
       innings = 7L,
       batting_size = 9L,
+      batting_size_rule = "exact",
       fielding = list(fielder_count = 9L),
       mercy_rule = list(tiers = .USA_MERCY),
       pinch_runner = list(allowed_for = "pitcher_catcher")
