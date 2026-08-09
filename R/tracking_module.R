@@ -120,13 +120,17 @@ tracking_ui <- function(id) {
     uiOutput(ns("situation")),
     uiOutput(ns("action_panel")),
     div(
-      class = "d-flex gap-2 mt-2",
-      actionButton(ns("undo"), "Undo", class = "btn-warning"),
-      actionButton(ns("sub"), "Substitution", class = "btn-outline-secondary"),
+      class = "d-flex gap-2 mt-2 bw-secondary-actions",
+      actionButton(ns("undo"), "Undo", class = "btn-sm btn-outline-warning"),
+      actionButton(
+        ns("sub"),
+        "Substitution",
+        class = "btn-sm btn-outline-secondary"
+      ),
       actionButton(
         ns("edit_lineup"),
         "Edit lineup",
-        class = "btn-outline-secondary"
+        class = "btn-sm btn-outline-secondary"
       )
     ),
     navset_tab(

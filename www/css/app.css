@@ -58,3 +58,5 @@
   .bw-score-side .bw-runs { font-size: 1.6rem; }
   .bw-sit-mid .bw-count { font-size: 1.3rem; }
 }
+
+.bw-secondary-actions { justify-content: flex-end; }

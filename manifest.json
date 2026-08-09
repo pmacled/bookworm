@@ -2077,7 +2077,7 @@
       "checksum": "2b59df6a610d5bc9b2a73fd1e4a28897"
     },
     "app.R": {
-      "checksum": "6cba11425fa49258b3673ae8fd818bc2"
+      "checksum": "772647119ff6c881681676ee778e5484"
     },
     "data-raw/README.md": {
       "checksum": "9ef6bd320c73d103ebc97deb7f5c111c"
@@ -2098,64 +2098,82 @@
       "checksum": "f98f49a3d817b85b3616ea9b2514b45d"
     },
     "R/boxscore.R": {
-      "checksum": "441edb9cb870c0b8288e4e0f94420be2"
+      "checksum": "46cd52fc5391fdb28ac1ccbfd45c854f"
     },
     "R/brand_colors.R": {
       "checksum": "457033942c2546e3c50f3fbea19a48e6"
+    },
+    "R/disposition.R": {
+      "checksum": "bf22ed2ba7acb982f444861fd1dbdac7"
+    },
+    "R/disposition_ui.R": {
+      "checksum": "a3d005ce65a13aca014569a274550a75"
     },
     "R/game_events.R": {
       "checksum": "e930452e8b3bf9fb0bd676378e269691"
     },
     "R/game_reducer.R": {
-      "checksum": "45c9ef2ea42b052b429b2ab7932beed7"
+      "checksum": "efa5b47c1c97538cbbed676021792a5b"
     },
     "R/json_io.R": {
       "checksum": "d032a899e47414723914f83f9f4f244f"
     },
+    "R/lineup_modal.R": {
+      "checksum": "6ea643ea36f843b16972c1aae5f8b5bd"
+    },
     "R/lineup_validation.R": {
-      "checksum": "b5598b988fe863aac09cd2c401eb1876"
+      "checksum": "31dbf813eeec7f529bc2333a6f954538"
     },
     "R/outcome_help.R": {
       "checksum": "edf999cf38ddc1e3e37f818b370e8bdd"
     },
     "R/rule_home_run.R": {
-      "checksum": "00b6d4bcb539f16c5812981f90a80b57"
+      "checksum": "844f825b5a0497643873a838b9890ff1"
     },
     "R/rule_pinch_runner.R": {
-      "checksum": "26e0123107e03cdde328a41d9a4e490b"
+      "checksum": "2f2e154c71dc1ae5cea505fd1beefb6d"
     },
     "R/rule_presets.R": {
-      "checksum": "83cc4cc26bde99516150c0b4da74a6ab"
+      "checksum": "48f3f3d3a9ddbd1f2e1f4c3083d49026"
     },
     "R/rules_engine.R": {
       "checksum": "136bc51252236c36e393862dfd9f470c"
     },
+    "R/runner_paths.R": {
+      "checksum": "8eb471e6816dcef64a2aafa092aa514c"
+    },
     "R/scorebook_render.R": {
-      "checksum": "2fb94ad33a7edc1bcb117acf2a1b85be"
+      "checksum": "969718aa3c2ca65a46221134b874452e"
     },
     "R/session_flow.R": {
       "checksum": "6566bed5942d222416742dee1571757c"
     },
     "R/setup_module.R": {
-      "checksum": "c32bce4e63015009de258d9d48c2f631"
+      "checksum": "2ef67748527a616f780ffd59b0e1595b"
+    },
+    "R/situation_card.R": {
+      "checksum": "b33a8286292087fb13f8bf1fce97eb79"
     },
     "R/storage.R": {
       "checksum": "c9f64c9b70d1c9a1cb7d4f003c49fa9f"
+    },
+    "R/substitution_ui.R": {
+      "checksum": "6a78e4dc338cbc4cf2a2839ac99201e4"
     },
     "R/supabase_client.R": {
       "checksum": "0510f61d4a17e40500cabb1209048455"
     },
     "R/tracking_module.R": {
-      "checksum": "bbe830aed74138f335e71c9b1bc42537"
+      "checksum": "1b479bce2c534ed9563dce1bc6c388d5"
     },
     "README.md": {
-      "checksum": "461551fb8be7b5fb65674ecb6a238516"
+      "checksum": "e25768f4c898c8ada43077e14fe5657c"
     },
     "run_tests.R": {
       "checksum": "61d9dfbdae96f2b50f8564614fea4b70"
     },
     "www/css/app.css": {
-      "checksum": "fca83545eb73751c923cb66d18e596a7"
+      "checksum": "75765169153314751e598746aae25ef9"
     },
     "www/icons/.gitkeep": {
       "checksum": "d41d8cd98f00b204e9800998ecf8427e"

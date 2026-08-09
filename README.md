@@ -18,16 +18,14 @@ box score (`R/boxscore.R`), and stats are derived views. Storage
 
 ## Known limitations
 - Undo reverts in-session; persisted event rows are pruned in a later phase.
+- The scorebook scrolls horizontally on narrow screens; the name column is inside the
+  SVG and does not stay pinned.
 - Lineups are entered per game (no cross-game roster persistence yet — Phase 3).
 - Row-Level Security is defined but not enforced (app-level owner scoping).
 - Fielding gender tiers are configurable via presets + base knobs; full per-tier
   hand-editing in the UI is deferred (the engine supports arbitrary tiers).
 - The mercy schedule is three fixed rows in the UI; the engine accepts any number
   of tiers, and add/remove rows are deferred.
-- Pinch-/courtesy-runner allowances are configurable and validated by the engine,
-  but nothing in the tracking UI records a runner substitution yet (slice 2.2).
-- The home-run limit is enforced by the engine; wiring it into play entry is
-  slice 2.2.
 - Sign-in requires Supabase configuration; without it the app runs guest-only and says so.
 
 ## Rules supported
