@@ -23,9 +23,18 @@ test_that("an unconfigured deployment (empty SUPABASE_URL) returns an error resu
   withr_vars <- c(SUPABASE_URL = "", SUPABASE_ANON_KEY = "")
   old <- Sys.getenv(names(withr_vars), unset = NA)
   do.call(Sys.setenv, as.list(withr_vars))
-  on.exit({
-    for (n in names(old)) if (is.na(old[[n]])) Sys.unsetenv(n) else do.call(Sys.setenv, setNames(list(old[[n]]), n))
-  }, add = TRUE)
+  on.exit(
+    {
+      for (n in names(old)) {
+        if (is.na(old[[n]])) {
+          Sys.unsetenv(n)
+        } else {
+          do.call(Sys.setenv, setNames(list(old[[n]]), n))
+        }
+      }
+    },
+    add = TRUE
+  )
 
   res <- gotrue_sign_in("nobody@example.com", "hunter2")
   expect_false(res$ok)
@@ -41,8 +50,14 @@ test_that("a transport failure from the performing step returns an error result 
   # access.
   old <- Sys.getenv("SUPABASE_URL", unset = NA)
   Sys.setenv(SUPABASE_URL = "https://example.invalid")
-  on.exit(if (is.na(old)) Sys.unsetenv("SUPABASE_URL") else Sys.setenv(SUPABASE_URL = old),
-          add = TRUE)
+  on.exit(
+    if (is.na(old)) {
+      Sys.unsetenv("SUPABASE_URL")
+    } else {
+      Sys.setenv(SUPABASE_URL = old)
+    },
+    add = TRUE
+  )
 
   boom <- function(req) stop("simulated transport failure")
   res <- gotrue_sign_in("nobody@example.com", "hunter2", perform = boom)
@@ -53,7 +68,10 @@ test_that("a transport failure from the performing step returns an error result 
 })
 
 test_that("friendly_auth_error rewrites known GoTrue messages", {
-  expect_match(friendly_auth_error("Invalid login credentials"), "email or password")
+  expect_match(
+    friendly_auth_error("Invalid login credentials"),
+    "email or password"
+  )
   expect_match(friendly_auth_error("User already registered"), "already")
   # Unknown messages pass through unchanged.
   expect_equal(friendly_auth_error("teapot"), "teapot")

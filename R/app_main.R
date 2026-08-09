@@ -3,7 +3,9 @@
 
 bookworm_ui <- function() {
   page_fillable(
-    title = APP_CONFIG$app_name, theme = app_theme, padding = 0,
+    title = APP_CONFIG$app_name,
+    theme = app_theme,
+    padding = 0,
     tags$head(tags$link(rel = "stylesheet", href = "css/app.css")),
     uiOutput("guest_banner"),
     navset_hidden(
@@ -22,28 +24,41 @@ bookworm_server <- function(input, output, session) {
 
   degraded <- reactiveVal(NULL)
 
-  observeEvent(identity(), {
-    req(!is.na(identity()$mode))
-    sf <- storage_for_identity(identity())
-    store(sf$storage)
-    degraded(if (isTRUE(sf$degraded)) sf$reason else NULL)
-    if (!is.null(sf$con)) onStop(function() DBI::dbDisconnect(sf$con))
-    nav_select("screen", "setup")
-  }, ignoreInit = TRUE)
+  observeEvent(
+    identity(),
+    {
+      req(!is.na(identity()$mode))
+      sf <- storage_for_identity(identity())
+      store(sf$storage)
+      degraded(if (isTRUE(sf$degraded)) sf$reason else NULL)
+      if (!is.null(sf$con)) {
+        onStop(function() DBI::dbDisconnect(sf$con))
+      }
+      nav_select("screen", "setup")
+    },
+    ignoreInit = TRUE
+  )
 
   output$guest_banner <- renderUI({
     req(!is.null(identity()))
-    if (!is.null(degraded()))
+    if (!is.null(degraded())) {
       div(class = "alert alert-danger m-2 py-2 small", degraded())
-    else if (identical(identity()$mode, "guest"))
-      div(class = "alert alert-warning m-2 py-2 small",
-        "Guest mode: sign in to save. Refreshing will lose this game.")
+    } else if (identical(identity()$mode, "guest")) {
+      div(
+        class = "alert alert-warning m-2 py-2 small",
+        "Guest mode: sign in to save. Refreshing will lose this game."
+      )
+    }
   })
 
-  observeEvent(game_start(), {
-    req(store(), game_start())
-    gid <- store()$create_game(list(name = "Game"))
-    tracking_server("track", store(), gid, game_start())
-    nav_select("screen", "track")
-  }, ignoreInit = TRUE)
+  observeEvent(
+    game_start(),
+    {
+      req(store(), game_start())
+      gid <- store()$create_game(list(name = "Game"))
+      tracking_server("track", store(), gid, game_start())
+      nav_select("screen", "track")
+    },
+    ignoreInit = TRUE
+  )
 }

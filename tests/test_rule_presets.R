@@ -1,13 +1,18 @@
 library(testthat)
-for (f in c("app_config.R","rules_engine.R","rule_presets.R"))
+for (f in c("app_config.R", "rules_engine.R", "rule_presets.R")) {
   source(file.path("R", f))
+}
 
 test_that("every preset is valid and round-trips through coercion", {
   for (id in names(RULE_PRESETS)) {
     cfg <- preset_ruleset(id)
     v <- validate_ruleset_config(cfg)
     expect_true(v$ok, info = paste(id, ":", paste(v$errors, collapse = "; ")))
-    expect_identical(cfg, coerce_ruleset_config(cfg), info = paste(id, "is not idempotent"))
+    expect_identical(
+      cfg,
+      coerce_ruleset_config(cfg),
+      info = paste(id, "is not idempotent")
+    )
     expect_equal(cfg$preset, id)
   }
 })
@@ -32,7 +37,8 @@ test_that("the standard presets differ in the four ways that matter", {
   bb <- preset_ruleset("standard_baseball")
   sp <- preset_ruleset("standard_slowpitch")
   fp <- preset_ruleset("standard_fastpitch")
-  expect_equal(bb$innings, 9L);  expect_equal(sp$innings, 7L)
+  expect_equal(bb$innings, 9L)
+  expect_equal(sp$innings, 7L)
   expect_equal(bb$fielding$fielder_count, 9L)
   expect_equal(sp$fielding$fielder_count, 10L)
   expect_equal(bb$foul_out_rule, "unlimited")
@@ -64,7 +70,7 @@ test_that("the GameOn presets reuse STANDARD_COED_FIELDING", {
   for (id in c("gameon_summer", "gameon_spring")) {
     cfg <- preset_ruleset(id)
     expect_equal(cfg$fielding$min_females, STANDARD_COED_FIELDING$min_females)
-    expect_equal(cfg$fielding$max_males,   STANDARD_COED_FIELDING$max_males)
+    expect_equal(cfg$fielding$max_males, STANDARD_COED_FIELDING$max_males)
     expect_length(cfg$fielding$tiers, length(STANDARD_COED_FIELDING$tiers))
     expect_equal(cfg$fielding$fielder_count, 10L)
     expect_equal(cfg$batting_gender_rule$type, "max_consecutive_males")
@@ -78,20 +84,29 @@ test_that("the GameOn presets reuse STANDARD_COED_FIELDING", {
 })
 
 test_that("GameOn Summer and Spring differ only in the starting count", {
-  su <- preset_ruleset("gameon_summer"); sp <- preset_ruleset("gameon_spring")
+  su <- preset_ruleset("gameon_summer")
+  sp <- preset_ruleset("gameon_spring")
   expect_equal(su$starting_count, list(balls = 0L, strikes = 0L))
   expect_equal(sp$starting_count, list(balls = 1L, strikes = 1L))
-  su$starting_count <- NULL; sp$starting_count <- NULL
-  su$preset <- NULL; sp$preset <- NULL
+  su$starting_count <- NULL
+  sp$starting_count <- NULL
+  su$preset <- NULL
+  sp$preset <- NULL
   expect_identical(su, sp)
 })
 
 test_that("ruleset_is_genderless separates the genderless presets from GameOn", {
-  for (id in c("anything_goes", "standard_baseball", "standard_slowpitch",
-               "standard_fastpitch"))
+  for (id in c(
+    "anything_goes",
+    "standard_baseball",
+    "standard_slowpitch",
+    "standard_fastpitch"
+  )) {
     expect_true(ruleset_is_genderless(preset_ruleset(id)), info = id)
-  for (id in c("gameon_summer", "gameon_spring"))
+  }
+  for (id in c("gameon_summer", "gameon_spring")) {
     expect_false(ruleset_is_genderless(preset_ruleset(id)), info = id)
+  }
 })
 
 test_that("ruleset_is_genderless flips on each gender-referencing field independently", {
@@ -102,30 +117,46 @@ test_that("ruleset_is_genderless flips on each gender-referencing field independ
   base <- preset_ruleset("anything_goes")
   expect_true(ruleset_is_genderless(base), info = "baseline")
 
-  cfg <- base; cfg$batting_gender_rule <- list(type = "max_consecutive_males", n = 2L)
+  cfg <- base
+  cfg$batting_gender_rule <- list(type = "max_consecutive_males", n = 2L)
   expect_false(ruleset_is_genderless(cfg), info = "batting_gender_rule$type")
 
-  cfg <- base; cfg$male_walk_rule <- "two_bases_then_female"
+  cfg <- base
+  cfg$male_walk_rule <- "two_bases_then_female"
   expect_false(ruleset_is_genderless(cfg), info = "male_walk_rule")
 
-  cfg <- base; cfg$fielding$min_females <- 2L
+  cfg <- base
+  cfg$fielding$min_females <- 2L
   expect_false(ruleset_is_genderless(cfg), info = "fielding$min_females")
 
-  cfg <- base; cfg$fielding$max_males <- 6L
+  cfg <- base
+  cfg$fielding$max_males <- 6L
   expect_false(ruleset_is_genderless(cfg), info = "fielding$max_males")
 
-  cfg <- base; cfg$fielding$tiers <- STANDARD_COED_FIELDING$tiers
+  cfg <- base
+  cfg$fielding$tiers <- STANDARD_COED_FIELDING$tiers
   expect_false(ruleset_is_genderless(cfg), info = "fielding$tiers")
 
-  cfg <- base; cfg$home_run_rule$limit_by_gender <- list(F = 3L)
-  expect_false(ruleset_is_genderless(cfg), info = "home_run_rule$limit_by_gender")
+  cfg <- base
+  cfg$home_run_rule$limit_by_gender <- list(F = 3L)
+  expect_false(
+    ruleset_is_genderless(cfg),
+    info = "home_run_rule$limit_by_gender"
+  )
 
-  cfg <- base; cfg$pinch_runner$eligibility <- "same_gender"
-  expect_false(ruleset_is_genderless(cfg), info = "pinch_runner$eligibility = same_gender")
+  cfg <- base
+  cfg$pinch_runner$eligibility <- "same_gender"
+  expect_false(
+    ruleset_is_genderless(cfg),
+    info = "pinch_runner$eligibility = same_gender"
+  )
 
-  cfg <- base; cfg$pinch_runner$eligibility <- "last_same_gender_out"
-  expect_false(ruleset_is_genderless(cfg),
-               info = "pinch_runner$eligibility = last_same_gender_out")
+  cfg <- base
+  cfg$pinch_runner$eligibility <- "last_same_gender_out"
+  expect_false(
+    ruleset_is_genderless(cfg),
+    info = "pinch_runner$eligibility = last_same_gender_out"
+  )
 })
 
 test_that("preset_ruleset rejects an unknown id", {

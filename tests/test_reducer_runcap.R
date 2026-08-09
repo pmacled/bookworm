@@ -1,6 +1,12 @@
 library(testthat)
-for (f in c("app_config.R","rules_engine.R","game_events.R","game_reducer.R"))
+for (f in c(
+  "app_config.R",
+  "rules_engine.R",
+  "game_events.R",
+  "game_reducer.R"
+)) {
   source(file.path("R", f))
+}
 
 # Most of the brief's run-cap cases already exist (test_rules_eval.R,
 # test_reducer_pa.R, test_reducer_halfruns.R) -- see task-3-report.md for the
@@ -9,24 +15,73 @@ for (f in c("app_config.R","rules_engine.R","game_events.R","game_reducer.R"))
 # reached over multiple plays, clamp semantics under cap_ends_half = FALSE,
 # and the notice-survives-the-half-ending guard on the plate_appearance path.
 
-mk <- function(prefix, n = 4L) lapply(seq_len(n), function(i)
-  make_player(paste0(prefix, i), paste(prefix, i), c("M","F")[(i %% 2) + 1L], i, i, i))
+mk <- function(prefix, n = 4L) {
+  lapply(seq_len(n), function(i) {
+    make_player(
+      paste0(prefix, i),
+      paste(prefix, i),
+      c("M", "F")[(i %% 2) + 1L],
+      i,
+      i,
+      i
+    )
+  })
+}
 
-start_with <- function(cfg) new_event("game_start", list(
-  ruleset = cfg, first_bat = "away",
-  home = list(team_id="H", name="Home", lineup = mk("h")),
-  away = list(team_id="A", name="Away", lineup = mk("a"))), seq = 1L)
+start_with <- function(cfg) {
+  new_event(
+    "game_start",
+    list(
+      ruleset = cfg,
+      first_bat = "away",
+      home = list(team_id = "H", name = "Home", lineup = mk("h")),
+      away = list(team_id = "A", name = "Away", lineup = mk("a"))
+    ),
+    seq = 1L
+  )
+}
 
-adv <- function(id, from, to, scored = FALSE) make_advance(id, from, to, scored = scored)
+adv <- function(id, from, to, scored = FALSE) {
+  make_advance(id, from, to, scored = scored)
+}
 
-pa <- function(batter, outcome, reached, advances = list(), outs = 0L, seq = 2L)
-  new_event("plate_appearance", list(team = "away", batter_id = batter, outcome = outcome,
-    reached = reached, rbi = 0L, outs_on_play = outs, advances = advances), seq = seq)
+pa <- function(
+  batter,
+  outcome,
+  reached,
+  advances = list(),
+  outs = 0L,
+  seq = 2L
+) {
+  new_event(
+    "plate_appearance",
+    list(
+      team = "away",
+      batter_id = batter,
+      outcome = outcome,
+      reached = reached,
+      rbi = 0L,
+      outs_on_play = outs,
+      advances = advances
+    ),
+    seq = seq
+  )
+}
 
-cap_cfg <- function(...) coerce_ruleset_config(utils::modifyList(
-  list(innings = 7L, run_cap = list(per_inning = 5L, open_last_inning = TRUE,
-                                    same_play_runs_count = TRUE, cap_ends_half = TRUE)),
-  list(...)))
+cap_cfg <- function(...) {
+  coerce_ruleset_config(utils::modifyList(
+    list(
+      innings = 7L,
+      run_cap = list(
+        per_inning = 5L,
+        open_last_inning = TRUE,
+        same_play_runs_count = TRUE,
+        cap_ends_half = TRUE
+      )
+    ),
+    list(...)
+  ))
+}
 
 test_that("clamp branch truncates to remaining room, not to the cap, when runs_before is nonzero", {
   # test_rules_eval.R's clamp-branch coverage only uses runs_before = 0, where
@@ -34,8 +89,14 @@ test_that("clamp branch truncates to remaining room, not to the cap, when runs_b
   # produce the same number. Here runs_before = 4 and cap = 5: remaining room
   # is 1, so a wrong "truncate to the cap value" implementation would return
   # 5 (or pass runs_on_play through unclamped at 4) instead of 1.
-  cfg <- cap_cfg(run_cap = list(per_inning = 5L, open_last_inning = TRUE,
-                                same_play_runs_count = FALSE, cap_ends_half = TRUE))
+  cfg <- cap_cfg(
+    run_cap = list(
+      per_inning = 5L,
+      open_last_inning = TRUE,
+      same_play_runs_count = FALSE,
+      cap_ends_half = TRUE
+    )
+  )
   r <- apply_run_cap(cfg, runs_before = 4L, runs_on_play = 4L, inning = 1L)
   expect_equal(r$runs, 1L)
   expect_true(r$cap_hit)
@@ -58,14 +119,21 @@ test_that("reaching the cap exactly (not exceeding it) over two separate plays s
   # total to land exactly on the cap via two ordinary single-run plays --
   # total == cap -- which would slip through a `total > cap` off-by-one
   # instead of the correct `total >= cap`.
-  cfg <- cap_cfg(run_cap = list(per_inning = 2L, open_last_inning = FALSE,
-                                same_play_runs_count = TRUE, cap_ends_half = TRUE))
+  cfg <- cap_cfg(
+    run_cap = list(
+      per_inning = 2L,
+      open_last_inning = FALSE,
+      same_play_runs_count = TRUE,
+      cap_ends_half = TRUE
+    )
+  )
   s <- fold_events(list(
     start_with(cfg),
     pa("a1", "HR", 4L, list(adv("a1", 0L, 4L, scored = TRUE)), seq = 2L),
-    pa("a2", "HR", 4L, list(adv("a2", 0L, 4L, scored = TRUE)), seq = 3L)))
+    pa("a2", "HR", 4L, list(adv("a2", 0L, 4L, scored = TRUE)), seq = 3L)
+  ))
   expect_equal(s$score$away, 2L)
-  expect_equal(s$half, "bottom")        # half ended on the cap, not on three outs
+  expect_equal(s$half, "bottom") # half ended on the cap, not on three outs
   expect_equal(s$outs, 0L)
   expect_equal(s$batting_team, "home")
 })
@@ -78,15 +146,22 @@ test_that("cap_ends_half = FALSE keeps the half alive under clamp semantics acro
   # exactly used up, cap now hit), a3 (1 run, but runs_before already >= cap).
   # A wrong `min(runs_on_play, cap)` clamp (instead of remaining room) would
   # let a2's run double-count against the cap and mis-total the score.
-  cfg <- cap_cfg(run_cap = list(per_inning = 2L, open_last_inning = FALSE,
-                                same_play_runs_count = FALSE, cap_ends_half = FALSE))
+  cfg <- cap_cfg(
+    run_cap = list(
+      per_inning = 2L,
+      open_last_inning = FALSE,
+      same_play_runs_count = FALSE,
+      cap_ends_half = FALSE
+    )
+  )
   s <- fold_events(list(
     start_with(cfg),
     pa("a1", "HR", 4L, list(adv("a1", 0L, 4L, scored = TRUE)), seq = 2L),
     pa("a2", "HR", 4L, list(adv("a2", 0L, 4L, scored = TRUE)), seq = 3L),
-    pa("a3", "HR", 4L, list(adv("a3", 0L, 4L, scored = TRUE)), seq = 4L)))
-  expect_equal(s$score$away, 2L)        # third run discarded
-  expect_equal(s$half, "top")           # still batting
+    pa("a3", "HR", 4L, list(adv("a3", 0L, 4L, scored = TRUE)), seq = 4L)
+  ))
+  expect_equal(s$score$away, 2L) # third run discarded
+  expect_equal(s$half, "top") # still batting
 })
 
 test_that("the run-cap notice survives the half ending via cap_ends_half on the plate_appearance path", {
@@ -97,12 +172,19 @@ test_that("the run-cap notice survives the half ending via cap_ends_half on the 
   # guards against a future advance_half() change (e.g. folding in a blanket
   # state reset) wiping the flag out from under a half that just ended on
   # the cap -- exactly the ordering bug flagged in Task 1.
-  cfg <- cap_cfg(run_cap = list(per_inning = 1L, open_last_inning = FALSE,
-                                same_play_runs_count = TRUE, cap_ends_half = TRUE))
+  cfg <- cap_cfg(
+    run_cap = list(
+      per_inning = 1L,
+      open_last_inning = FALSE,
+      same_play_runs_count = TRUE,
+      cap_ends_half = TRUE
+    )
+  )
   s <- fold_events(list(
     start_with(cfg),
-    pa("a1", "HR", 4L, list(adv("a1", 0L, 4L, scored = TRUE)), seq = 2L)))
-  expect_equal(s$half, "bottom")   # confirm the half really did end on the cap
+    pa("a1", "HR", 4L, list(adv("a1", 0L, 4L, scored = TRUE)), seq = 2L)
+  ))
+  expect_equal(s$half, "bottom") # confirm the half really did end on the cap
   codes <- vapply(s$warnings, function(w) w$code, character(1))
   expect_true("run_cap" %in% codes)
 })
@@ -111,31 +193,66 @@ test_that("the run-cap notice survives the half ending via cap_ends_half on the 
 
 run_cap_notice <- function(s) {
   hit <- Filter(function(w) identical(w$code, "run_cap"), s$warnings)
-  if (!length(hit)) return(NA_character_)
+  if (!length(hit)) {
+    return(NA_character_)
+  }
   hit[[1]]$message
 }
 
 test_that("under same_play_runs_count the notice says same-play runs still count", {
-  cfg <- cap_cfg(run_cap = list(per_inning = 2L, open_last_inning = FALSE,
-                                same_play_runs_count = TRUE, cap_ends_half = TRUE))
-  s <- fold_events(list(start_with(cfg),
+  cfg <- cap_cfg(
+    run_cap = list(
+      per_inning = 2L,
+      open_last_inning = FALSE,
+      same_play_runs_count = TRUE,
+      cap_ends_half = TRUE
+    )
+  )
+  s <- fold_events(list(
+    start_with(cfg),
     pa("a1", "HR", 4L, list(adv("a1", 0L, 4L, scored = TRUE)), seq = 2L),
-    pa("a2", "HR", 4L, list(adv("a2", 0L, 4L, scored = TRUE)), seq = 3L)))
-  expect_match(run_cap_notice(s), "Run cap of 2 reached this inning.", fixed = TRUE)
+    pa("a2", "HR", 4L, list(adv("a2", 0L, 4L, scored = TRUE)), seq = 3L)
+  ))
+  expect_match(
+    run_cap_notice(s),
+    "Run cap of 2 reached this inning.",
+    fixed = TRUE
+  )
   expect_match(run_cap_notice(s), "same at-bat", fixed = TRUE)
 })
 
 test_that("under clamp semantics the notice does NOT claim same-play runs count", {
   # same_play_runs_count = FALSE really does clamp a grand slam 4 -> 3, so the
   # owner's wording states the exact opposite of what the scorer just saw.
-  cfg <- cap_cfg(run_cap = list(per_inning = 3L, open_last_inning = FALSE,
-                                same_play_runs_count = FALSE, cap_ends_half = TRUE))
-  s <- fold_events(list(start_with(cfg),
-    pa("a1", "HR", 4L, list(
-         adv("x1", 1L, 4L, scored = TRUE), adv("x2", 2L, 4L, scored = TRUE),
-         adv("x3", 3L, 4L, scored = TRUE), adv("a1", 0L, 4L, scored = TRUE)), seq = 2L)))
-  expect_equal(s$score$away, 3L)                      # the slam WAS clamped 4 -> 3
-  expect_match(run_cap_notice(s), "Run cap of 3 reached this inning.", fixed = TRUE)
+  cfg <- cap_cfg(
+    run_cap = list(
+      per_inning = 3L,
+      open_last_inning = FALSE,
+      same_play_runs_count = FALSE,
+      cap_ends_half = TRUE
+    )
+  )
+  s <- fold_events(list(
+    start_with(cfg),
+    pa(
+      "a1",
+      "HR",
+      4L,
+      list(
+        adv("x1", 1L, 4L, scored = TRUE),
+        adv("x2", 2L, 4L, scored = TRUE),
+        adv("x3", 3L, 4L, scored = TRUE),
+        adv("a1", 0L, 4L, scored = TRUE)
+      ),
+      seq = 2L
+    )
+  ))
+  expect_equal(s$score$away, 3L) # the slam WAS clamped 4 -> 3
+  expect_match(
+    run_cap_notice(s),
+    "Run cap of 3 reached this inning.",
+    fixed = TRUE
+  )
   expect_false(grepl("same at-bat", run_cap_notice(s), fixed = TRUE))
   expect_match(run_cap_notice(s), "did not count", fixed = TRUE)
 })

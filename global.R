@@ -9,7 +9,10 @@ library(uuid)
 
 # Source R/ with brand_colors.R and app_config.R first (vasper pattern).
 .r_files <- list.files("R", pattern = "\\.R$", full.names = TRUE)
-.r_first <- file.path("R", c("brand_colors.R", "app_config.R", "rules_engine.R"))
+.r_first <- file.path(
+  "R",
+  c("brand_colors.R", "app_config.R", "rules_engine.R")
+)
 invisible(lapply(c(.r_first, setdiff(.r_files, .r_first)), source))
 rm(.r_files, .r_first)
 

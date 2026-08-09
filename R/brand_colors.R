@@ -9,33 +9,37 @@
 # Resolves a semantic role (e.g. "primary") through its palette alias to a hex value.
 .resolve_brand_color <- function(name) {
   val <- .brand_raw$color[[name]]
-  if (is.null(val)) return(NULL)
+  if (is.null(val)) {
+    return(NULL)
+  }
   .brand_palette[[val]] %||% val
 }
 
 # Resolves the "-light" companion of a semantic role, e.g. primary -> ink-blue-light.
 .resolve_brand_light <- function(name) {
   alias <- .brand_raw$color[[name]]
-  if (is.null(alias)) return(NULL)
+  if (is.null(alias)) {
+    return(NULL)
+  }
   .brand_palette[[paste0(alias, "-light")]]
 }
 
 BRAND_COLORS <- list(
-  primary       = .resolve_brand_color("primary"),
+  primary = .resolve_brand_color("primary"),
   primary_light = .resolve_brand_light("primary"),
-  secondary     = .resolve_brand_color("secondary"),
-  success       = .resolve_brand_color("success"),
-  warning       = .resolve_brand_color("warning"),
+  secondary = .resolve_brand_color("secondary"),
+  success = .resolve_brand_color("success"),
+  warning = .resolve_brand_color("warning"),
   warning_light = .resolve_brand_light("warning"),
-  danger        = .resolve_brand_color("danger"),
-  danger_light  = .resolve_brand_light("danger"),
-  foreground    = .resolve_brand_color("foreground"),
-  background    = .resolve_brand_color("background"),
-  light         = .resolve_brand_color("light"),
-  dark          = .resolve_brand_color("dark"),
+  danger = .resolve_brand_color("danger"),
+  danger_light = .resolve_brand_light("danger"),
+  foreground = .resolve_brand_color("foreground"),
+  background = .resolve_brand_color("background"),
+  light = .resolve_brand_color("light"),
+  dark = .resolve_brand_color("dark"),
   # Palette-only entries with no Bootstrap role of their own.
-  surface       = .brand_palette[["paper-shade"]],
-  rule_line     = .brand_palette[["rule-blue"]]
+  surface = .brand_palette[["paper-shade"]],
+  rule_line = .brand_palette[["rule-blue"]]
 )
 
 rm(.brand_raw, .brand_palette, .resolve_brand_color, .resolve_brand_light)

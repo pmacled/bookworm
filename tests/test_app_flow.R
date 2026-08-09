@@ -10,7 +10,7 @@ suppressMessages(source("global.R"))
 test_that("continue-as-guest wires storage and navigates without a nav error", {
   testServer(bookworm_server, {
     session$flushReact()
-    session$setInputs(`auth-do_guest` = 1)   # click "Continue as guest"
+    session$setInputs(`auth-do_guest` = 1) # click "Continue as guest"
     # The identity observer must run to completion: it calls nav_select("screen",
     # "setup") — a bogus nav_hide() here previously crashed with "argument target
     # missing". If it still threw, store() would remain NULL.
@@ -27,19 +27,35 @@ test_that("starting a game creates a game and advances to tracking", {
     # Provide the setup form inputs, then click Start.
     session$setInputs(
       `setup-preset` = "anything_goes",
-      `setup-start_balls` = 1, `setup-start_strikes` = 1,
-      `setup-foul_out` = "out", `setup-gender_rule` = "none", `setup-gender_n` = 2,
-      `setup-min_females` = 0, `setup-innings` = 7,
-      `setup-fielder_count` = 0, `setup-run_cap` = 0,
-      `setup-open_last` = TRUE, `setup-cap_same_play` = TRUE, `setup-cap_ends_half` = TRUE,
-      `setup-mercy_diff_1` = 0, `setup-mercy_diff_2` = 0, `setup-mercy_diff_3` = 0,
-      `setup-hr_limit` = 0, `setup-hr_limit_m` = 0, `setup-hr_limit_f` = 0,
-      `setup-hr_over` = "out", `setup-hr_itp_counts` = FALSE,
-      `setup-pr_inning` = 0, `setup-pr_game` = 0, `setup-pr_player` = 0,
-      `setup-pr_elig` = "anyone", `setup-pr_for` = "anyone",
-      `setup-away_name` = "Away", `setup-home_name` = "Home"
+      `setup-start_balls` = 1,
+      `setup-start_strikes` = 1,
+      `setup-foul_out` = "out",
+      `setup-gender_rule` = "none",
+      `setup-gender_n` = 2,
+      `setup-min_females` = 0,
+      `setup-innings` = 7,
+      `setup-fielder_count` = 0,
+      `setup-run_cap` = 0,
+      `setup-open_last` = TRUE,
+      `setup-cap_same_play` = TRUE,
+      `setup-cap_ends_half` = TRUE,
+      `setup-mercy_diff_1` = 0,
+      `setup-mercy_diff_2` = 0,
+      `setup-mercy_diff_3` = 0,
+      `setup-hr_limit` = 0,
+      `setup-hr_limit_m` = 0,
+      `setup-hr_limit_f` = 0,
+      `setup-hr_over` = "out",
+      `setup-hr_itp_counts` = FALSE,
+      `setup-pr_inning` = 0,
+      `setup-pr_game` = 0,
+      `setup-pr_player` = 0,
+      `setup-pr_elig` = "anyone",
+      `setup-pr_for` = "anyone",
+      `setup-away_name` = "Away",
+      `setup-home_name` = "Home"
     )
-    session$setInputs(`setup-start` = 1)      # click "Start game"
+    session$setInputs(`setup-start` = 1) # click "Start game"
     # The game_start observer must create a game and init tracking without error.
     lg <- store()$list_games()
     expect_equal(nrow(lg), 1L)
@@ -61,21 +77,28 @@ test_that("an unrelated rules-panel edit does not re-render the lineup shells, b
   # here. Setting the control it would have updated exercises the same debounce
   # logic in show_gender without depending on that untestable round-trip.
   assign(".lineup_render_count", 0L, envir = globalenv())
-  trace(".lineup_ui",
-        tracer = quote(assign(".lineup_render_count",
-                               get(".lineup_render_count", envir = globalenv()) + 1L,
-                               envir = globalenv())),
-        print = FALSE)
+  trace(
+    ".lineup_ui",
+    tracer = quote(assign(
+      ".lineup_render_count",
+      get(".lineup_render_count", envir = globalenv()) + 1L,
+      envir = globalenv()
+    )),
+    print = FALSE
+  )
   on.exit(try(untrace(".lineup_ui"), silent = TRUE), add = TRUE)
 
   testServer(bookworm_server, {
     session$flushReact()
     session$setInputs(`auth-do_guest` = 1)
-    session$setInputs(`setup-preset` = "anything_goes", `setup-gender_rule` = "none",
-                       `setup-fielding_preset` = "none")   # genderless
+    session$setInputs(
+      `setup-preset` = "anything_goes",
+      `setup-gender_rule` = "none",
+      `setup-fielding_preset` = "none"
+    ) # genderless
     session$flushReact()
     n0 <- get(".lineup_render_count", envir = globalenv())
-    expect_gt(n0, 0L)   # sanity: the initial render actually happened
+    expect_gt(n0, 0L) # sanity: the initial render actually happened
 
     # Typing in the rules panel (not touching gender-related fields) must not
     # invalidate the lineup shells.
@@ -84,7 +107,10 @@ test_that("an unrelated rules-panel edit does not re-render the lineup shells, b
     expect_equal(get(".lineup_render_count", envir = globalenv()), n0)
 
     # A rule change that flips genderless-ness must re-render them.
-    session$setInputs(`setup-gender_rule` = "max_consecutive_males", `setup-gender_n` = 2)
+    session$setInputs(
+      `setup-gender_rule` = "max_consecutive_males",
+      `setup-gender_n` = 2
+    )
     session$flushReact()
     expect_gt(get(".lineup_render_count", envir = globalenv()), n0)
   })
@@ -115,17 +141,26 @@ test_that("a ruleset change that flips genderless-ness clears stale rows so no p
   # actually cleared.
   testServer(setup_server, {
     session$flushReact()
-    session$setInputs(gender_rule = "none", fielding_preset = "none")   # genderless
+    session$setInputs(gender_rule = "none", fielding_preset = "none") # genderless
     session$flushReact()
     expect_false(isolate(show_gender()))
 
-    session$setInputs(away_add = 1); session$flushReact()
-    session$setInputs(away_add = 1); session$flushReact()
-    session$setInputs(away_add = 1); session$flushReact()
+    session$setInputs(away_add = 1)
+    session$flushReact()
+    session$setInputs(away_add = 1)
+    session$flushReact()
+    session$setInputs(away_add = 1)
+    session$flushReact()
     session$setInputs(
-      away_name_1 = "A", away_jersey_1 = 1, away_pos_1 = "P",
-      away_name_2 = "B", away_jersey_2 = 2, away_pos_2 = "C",
-      away_name_3 = "C", away_jersey_3 = 3, away_pos_3 = "SS"
+      away_name_1 = "A",
+      away_jersey_1 = 1,
+      away_pos_1 = "P",
+      away_name_2 = "B",
+      away_jersey_2 = 2,
+      away_pos_2 = "C",
+      away_name_3 = "C",
+      away_jersey_3 = 3,
+      away_pos_3 = "SS"
     )
     session$flushReact()
     expect_equal(length(isolate(rows$away())), 3L)
@@ -136,7 +171,12 @@ test_that("a ruleset change that flips genderless-ness clears stale rows so no p
     expect_true(isolate(show_gender()))
 
     expect_equal(length(isolate(rows$away())), 0L)
-    lu <- collect_lineup(input, "away", isolate(rows$away()), show_gender = isolate(show_gender()))
+    lu <- collect_lineup(
+      input,
+      "away",
+      isolate(rows$away()),
+      show_gender = isolate(show_gender())
+    )
     expect_equal(length(lu), 0L)
   })
 })
