@@ -278,6 +278,53 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
     })
 
     observeEvent(
+      input$sub,
+      {
+        showModal(substitution_modal_ui(
+          session$ns,
+          isolate(state()),
+          "batting"
+        ))
+      },
+      ignoreInit = TRUE
+    )
+
+    # Switching the type re-renders the modal with the right fields.
+    observeEvent(
+      input$sub_kind,
+      {
+        showModal(substitution_modal_ui(
+          session$ns,
+          isolate(state()),
+          input$sub_kind
+        ))
+      },
+      ignoreInit = TRUE
+    )
+
+    observeEvent(
+      input$sub_commit,
+      {
+        s <- isolate(state())
+        res <- build_substitution_event(input, s, input$sub_kind %||% "batting")
+        if (!is.null(res$errors)) {
+          showModal(substitution_modal_ui(
+            session$ns,
+            s,
+            input$sub_kind %||% "batting",
+            res$errors
+          ))
+          return(invisible())
+        }
+        removeModal()
+        appended <- storage$append_event(game_id, res)
+        events(c(isolate(events()), list(appended)))
+        storage$save_snapshot(game_id, isolate(state()))
+      },
+      ignoreInit = TRUE
+    )
+
+    observeEvent(
       input$half_runs_go,
       {
         s <- isolate(state())

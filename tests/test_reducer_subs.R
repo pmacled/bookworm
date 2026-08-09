@@ -27,3 +27,31 @@ test_that("courtesy runner swaps the runner on base", {
   s <- fold_events(list(start_evt(), pa1, cr))
   expect_equal(s$bases$first, "cr1")
 })
+
+test_that("a batting substitution keeps every player field", {
+  st <- initial_game_state()
+  st$lineups$away <- list(make_player("a1", "A1", "M", 1L, 1L, "SS"))
+  evt <- new_event("substitution", list(team = "away", kind = "batting", order_slot = 1L,
+    in_player = make_player("a9", "Sub", "F", 22L, NA_integer_, "2B")))
+  s <- apply_substitution(st, evt)
+  p <- s$lineups$away[[1]]
+  expect_equal(p$player_id, "a9")
+  expect_equal(p$name, "Sub")
+  expect_equal(p$gender, "F")
+  expect_equal(p$jersey_number, 22L)
+  expect_equal(p$order_slot, 1L)
+  expect_equal(p$position, "2B")
+})
+
+test_that("a defensive substitution keeps the batting order slot", {
+  st <- initial_game_state()
+  st$lineups$home <- list(make_player("h1", "H1", "M", 1L, 3L, "P"))
+  evt <- new_event("substitution", list(team = "home", kind = "defensive",
+    out_player_id = "h1", position = "LF",
+    in_player = make_player("h9", "Sub", "M", 44L, NA_integer_, NA_character_)))
+  s <- apply_substitution(st, evt)
+  p <- s$lineups$home[[1]]
+  expect_equal(p$player_id, "h9")
+  expect_equal(p$position, "LF")
+  expect_equal(p$order_slot, 3L)
+})
