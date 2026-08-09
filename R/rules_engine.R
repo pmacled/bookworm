@@ -43,6 +43,13 @@ default_ruleset_config <- function() {
   }
   if (!is.list(x)) x <- list()
   for (v in vnames) {
+    # `x[[v]] <- NULL` REMOVES the element rather than storing NULL, so an explicit
+    # `list(foul_out_rule = NULL)` override would delete the default outright and
+    # validation would then throw "argument is of length zero". This function's whole
+    # job is "never lose data", so an explicit NULL means "no override", not "erase".
+    # (Integer fields were accidentally rescued by coerce's trailing .as_int_or_na()
+    # lines; string and logical fields had no such backstop.)
+    if (is.null(val[[v]])) next
     x[[v]] <- if (v %in% names(x) && is.list(x[[v]]) && is.list(val[[v]]))
       .merge_ruleset(x[[v]], val[[v]])
     else val[[v]]
@@ -145,13 +152,21 @@ coerce_ruleset_config <- function(cfg) {
   d
 }
 
+# TRUE only when `x` is a single, non-NA number inside [lo, hi]. A cleared
+# numericInput submits NA and `NA < 0` is NA, so the obvious
+# `!is.numeric(x) || x < lo` returns NA and `if (NA)` is a hard error -- i.e.
+# the validator crashed instead of reporting the very input it exists to reject.
+# A NULL input coerced by as.integer() gives integer(0), which is equally fatal.
+.num_in_range <- function(x, lo, hi)
+  isTRUE(is.numeric(x) && length(x) == 1L && !is.na(x) && x >= lo && x <= hi)
+
 validate_ruleset_config <- function(cfg) {
   errors <- character()
   add <- function(msg) errors <<- c(errors, msg)
 
   b <- cfg$starting_count$balls; s <- cfg$starting_count$strikes
-  if (!is.numeric(b) || b < 0 || b > 3) add("starting balls must be 0-3")
-  if (!is.numeric(s) || s < 0 || s > 2) add("starting strikes must be 0-2")
+  if (!.num_in_range(b, 0, 3)) add("starting balls must be 0-3")
+  if (!.num_in_range(s, 0, 2)) add("starting strikes must be 0-2")
   if (!cfg$foul_out_rule %in% c("out", "one_courtesy_foul", "unlimited")) add("invalid foul_out_rule")
 
   bg <- cfg$batting_gender_rule$type
@@ -165,9 +180,12 @@ validate_ruleset_config <- function(cfg) {
     add("batting_gender_rule n must be >= 1")
 
   if (!cfg$male_walk_rule %in% c("none", "two_bases_then_female")) add("invalid male_walk_rule")
-  if (!is.numeric(cfg$innings) || cfg$innings < 1) add("innings must be >= 1")
+  if (!.num_in_range(cfg$innings, 1, Inf)) add("innings must be >= 1")
 
-  if (!is.na(cfg$batting_size) && (!is.numeric(cfg$batting_size) || cfg$batting_size < 1)) {
+  # NA batting_size is legitimate here (it means "unlimited"), so only a present
+  # value has to be a positive number.
+  bsz <- cfg$batting_size
+  if (!(length(bsz) == 1L && is.na(bsz)) && !.num_in_range(bsz, 1, Inf)) {
     add("batting_size must be a positive integer or NA (unlimited)")
   }
 
@@ -262,22 +280,30 @@ evaluate_fielding <- function(cfg, defense_lineup) {
   n_of <- sum(is_f & cat_of == "outfield")
   n_if <- sum(is_f & cat_of == "infield")
 
-  minf <- f$min_females %||% 0L
-  if (Ftot < minf) add("min_females", sprintf("Need at least %d females in the field (have %d).", minf, Ftot))
-  maxm <- f$max_males
-  if (!is.null(maxm) && !is.na(maxm) && Mtot > maxm)
+  # Every threshold below is read through .as_int_or_na() and gated on !is.na():
+  # a cleared numericInput persists NA into the ruleset, `Ftot < NA` is NA, and
+  # `if (NA)` is a hard error -- which, because the load path re-folds every event,
+  # would make the game permanently unloadable rather than merely mis-evaluated.
+  # An absent threshold means "no requirement", so skipping is the right reading.
+  minf <- .as_int_or_na(f$min_females %||% 0L)
+  if (!is.na(minf) && Ftot < minf)
+    add("min_females", sprintf("Need at least %d females in the field (have %d).", minf, Ftot))
+  maxm <- .as_int_or_na(f$max_males)
+  if (!is.na(maxm) && Mtot > maxm)
     add("max_males", sprintf("No more than %d males in the field (have %d).", maxm, Mtot))
 
   tiers <- f$tiers %||% list()
   if (length(tiers) > 0) {
-    thr <- vapply(tiers, function(t) as.integer(t$females), integer(1))
+    thr <- vapply(tiers, function(t) .as_int_or_na(t$females), integer(1))
+    thr[is.na(thr)] <- 0L
     ord <- order(thr); tiers <- tiers[ord]; thr <- thr[ord]
     hits <- which(thr <= Ftot)
     tier <- if (length(hits)) tiers[[max(hits)]] else tiers[[1]]
-    if (n_of < as.integer(tier$outfield))
-      add("outfield_min", sprintf("Need at least %d females in the outfield (have %d).", tier$outfield, n_of))
-    if (n_if < as.integer(tier$infield))
-      add("infield_min", sprintf("Need at least %d females in the infield (have %d).", tier$infield, n_if))
+    req_of <- .as_int_or_na(tier$outfield); req_if <- .as_int_or_na(tier$infield)
+    if (!is.na(req_of) && n_of < req_of)
+      add("outfield_min", sprintf("Need at least %d females in the outfield (have %d).", req_of, n_of))
+    if (!is.na(req_if) && n_if < req_if)
+      add("infield_min", sprintf("Need at least %d females in the infield (have %d).", req_if, n_if))
     if (identical(tier$battery, "one")) {
       ppos <- Filter(function(p) identical(as.character(p$position), "P"), fielders)
       cpos <- Filter(function(p) identical(as.character(p$position), "C"), fielders)
@@ -292,9 +318,12 @@ evaluate_fielding <- function(cfg, defense_lineup) {
 # uses this to drop the M/F column from the lineup table entirely.
 ruleset_is_genderless <- function(cfg) {
   f <- cfg$fielding
+  # .as_int_or_na, not a bare comparison: an NA min_females would make
+  # `(...) == 0L` return NA and the enclosing `&&` chain blow up in the caller.
+  minf <- .as_int_or_na(f$min_females %||% 0L)
   identical(cfg$batting_gender_rule$type, "none") &&
     identical(cfg$male_walk_rule, "none") &&
-    (f$min_females %||% 0L) == 0L &&
+    (is.na(minf) || minf == 0L) &&
     is.na(f$max_males %||% NA_integer_) &&
     length(f$tiers %||% list()) == 0L &&
     length(cfg$home_run_rule$limit_by_gender %||% list()) == 0L &&

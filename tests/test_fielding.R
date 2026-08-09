@@ -48,6 +48,31 @@ test_that("tier at 5 females requires 2 outfield + 2 infield", {
   expect_false("infield_min" %in% cd)
 })
 
+# --- Finding 3: an NA threshold (a cleared numericInput) must not crash the reducer ---
+
+legal_10 <- function() list(
+  pl("F","P"), pl("M","C"),
+  pl("F","SS"), pl("M","1B"), pl("M","2B"), pl("M","3B"),
+  pl("F","LF"), pl("M","LCF"), pl("M","RCF"), pl("F","RF"))
+
+test_that("an NA min_females is treated as no minimum, not as an if(NA) crash", {
+  # A cleared "Min females in field" box persists NA into the ruleset, and
+  # `Ftot < NA` is NA -- so `if (Ftot < minf)` errored on EVERY event thereafter,
+  # which (because loading re-folds the whole event list) bricked the game.
+  cfg <- fld(list(fielder_count = NA_integer_, min_females = NA_integer_,
+                  max_males = NA_integer_, tiers = list(),
+                  position_requirements = list()))
+  expect_equal(length(evaluate_fielding(cfg, legal_10())), 0L)
+})
+
+test_that("an NA tier outfield/infield minimum is skipped, not an if(NA) crash", {
+  cfg <- fld(list(fielder_count = NA_integer_, min_females = 0L, max_males = NA_integer_,
+                  tiers = list(list(females = 0L, outfield = NA_integer_,
+                                    infield = NA_integer_, battery = "any")),
+                  position_requirements = list()))
+  expect_equal(length(evaluate_fielding(cfg, legal_10())), 0L)
+})
+
 test_that("6+ females relaxes battery (both may be female)", {
   cfg <- fld(STANDARD_COED_FIELDING)
   d <- list(

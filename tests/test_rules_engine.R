@@ -18,21 +18,84 @@ test_that("coerce merges partial over defaults", {
 test_that("validation rejects bad starting count and unknown enums", {
   bad <- default_ruleset_config()
   bad$starting_count$strikes <- 3L
-  expect_false(validate_ruleset_config(bad)$ok)
+  v <- validate_ruleset_config(bad)
+  expect_false(v$ok)
+  expect_equal(v$errors, "starting strikes must be 0-2")
 
   bad2 <- default_ruleset_config()
   bad2$foul_out_rule <- "explode"
-  expect_false(validate_ruleset_config(bad2)$ok)
+  v2 <- validate_ruleset_config(bad2)
+  expect_false(v2$ok)
+  expect_equal(v2$errors, "invalid foul_out_rule")
 
   bad3 <- default_ruleset_config()
   bad3$batting_gender_rule$type <- "every_n"
   bad3$batting_gender_rule$n <- NA_integer_   # every_n requires n
-  expect_false(validate_ruleset_config(bad3)$ok)
+  v3 <- validate_ruleset_config(bad3)
+  expect_false(v3$ok)
+  # `every_n` is a *legacy* alias: reaching validation un-migrated means both the
+  # enum check and the requires-n check must speak up, not just one of them.
+  expect_equal(v3$errors,
+               c("invalid batting_gender_rule type", "every_n batting rule requires n"))
 })
 
-test_that("foul_out_rule accepts unlimited", {
-  cfg <- default_ruleset_config(); cfg$foul_out_rule <- "unlimited"
+# --- Finding 2: a cleared numericInput sends NA, and validation must SAY SO, not throw ---
+
+test_that("a cleared starting count is rejected with a message, not an NA crash", {
+  # `!is.numeric(NA_integer_) || NA_integer_ < 0` evaluates to NA, and `if (NA)`
+  # is an error -- so validate_ruleset_config() itself used to blow up on the
+  # single most reachable bad input there is: an emptied numeric box.
+  for (fld in c("balls", "strikes")) {
+    cfg <- default_ruleset_config()
+    cfg$starting_count[[fld]] <- NA_integer_
+    v <- validate_ruleset_config(cfg)      # must not error
+    expect_false(v$ok, info = fld)
+    expect_match(v$errors, sprintf("starting %s", fld), all = FALSE)
+  }
+})
+
+test_that("cleared innings is rejected with a message, not an NA crash", {
+  cfg <- default_ruleset_config()
+  cfg$innings <- NA_integer_
+  v <- validate_ruleset_config(cfg)
+  expect_false(v$ok)
+  expect_equal(v$errors, "innings must be >= 1")
+})
+
+test_that("a zero-length numeric (a NULL input coerced by as.integer) is rejected, not crashed on", {
+  cfg <- default_ruleset_config()
+  cfg$innings <- integer(0)
+  cfg$starting_count$balls <- integer(0)
+  v <- validate_ruleset_config(cfg)
+  expect_false(v$ok)
+  expect_true(all(c("starting balls must be 0-3", "innings must be >= 1") %in% v$errors))
+})
+
+test_that("a cleared batting_size is unlimited, not an error", {
+  # batting_size is the one numeric where NA is a legitimate value (unlimited).
+  cfg <- default_ruleset_config()
+  cfg$batting_size <- NA_integer_
   expect_true(validate_ruleset_config(cfg)$ok)
+})
+
+# --- Finding 8: .merge_ruleset() must not drop a key on an explicit NULL ---
+
+test_that("an explicit NULL override keeps the default instead of deleting the key", {
+  # `x[[v]] <- NULL` *removes* the element. Integer fields are accidentally
+  # restored by coerce's trailing .as_int_or_na() lines; string and logical
+  # fields have no such backstop, so the key simply vanished and validation
+  # then threw "argument is of length zero".
+  cfg <- coerce_ruleset_config(list(foul_out_rule = NULL))
+  expect_equal(cfg$foul_out_rule, "unlimited")
+  expect_true(validate_ruleset_config(cfg)$ok)
+
+  cfg2 <- coerce_ruleset_config(list(male_walk_rule = NULL, short_lineup_auto_out = NULL,
+                                     innings = NULL, home_run_rule = list(over_limit_result = NULL)))
+  expect_equal(cfg2$male_walk_rule, "none")
+  expect_false(cfg2$short_lineup_auto_out)
+  expect_equal(cfg2$innings, 7L)
+  expect_equal(cfg2$home_run_rule$over_limit_result, "out")
+  expect_true(validate_ruleset_config(cfg2)$ok)
 })
 
 test_that("batting_size defaults to unlimited (NA) and validates", {
