@@ -7,26 +7,55 @@
 # dedupes on; `message` is user-facing copy and may be reworded freely.
 validate_lineup <- function(cfg, lineup, team_label) {
   items <- list()
-  add <- function(severity, code, message)
-    items[[length(items) + 1]] <<- list(severity = severity, code = code, message = message)
+  add <- function(severity, code, message) {
+    items[[length(items) + 1]] <<- list(
+      severity = severity,
+      code = code,
+      message = message
+    )
+  }
 
   batters <- Filter(function(p) !is.na(p$order_slot), lineup)
   if (length(batters) == 0L) {
-    add("notice", "run_only",
-        sprintf("%s has no lineup — it will be tracked by runs per inning.", team_label))
+    add(
+      "notice",
+      "run_only",
+      sprintf(
+        "%s has no lineup — it will be tracked by runs per inning.",
+        team_label
+      )
+    )
     return(list(ok = TRUE, items = items))
   }
-  batters <- batters[order(vapply(batters, function(p) p$order_slot, integer(1)))]
+  batters <- batters[order(vapply(
+    batters,
+    function(p) p$order_slot,
+    integer(1)
+  ))]
 
   bs <- cfg$batting_size
-  if (!is.na(bs) && length(batters) != bs)
-    add("notice", "batting_size", sprintf("%d batters entered; this ruleset expects %d.",
-                                          length(batters), bs))
+  # batting_size is a maximum: a short lineup is fine, only an oversized one warns.
+  if (!is.na(bs) && length(batters) > bs) {
+    add(
+      "notice",
+      "batting_size",
+      sprintf(
+        "%d batters entered; this ruleset allows at most %d.",
+        length(batters),
+        bs
+      )
+    )
+  }
 
   jerseys <- vapply(batters, function(p) p$jersey_number, integer(1))
   dupe_j <- unique(jerseys[!is.na(jerseys) & duplicated(jerseys)])
-  for (j in dupe_j)
-    add("notice", "duplicate_jersey", sprintf("Jersey number %d is used more than once.", j))
+  for (j in dupe_j) {
+    add(
+      "notice",
+      "duplicate_jersey",
+      sprintf("Jersey number %d is used more than once.", j)
+    )
+  }
 
   # Dedupe names case-insensitively (a scorer typing "sam" and "Sam" almost certainly
   # means the same collision), but report the name using the first entry's original
@@ -35,7 +64,11 @@ validate_lineup <- function(cfg, lineup, team_label) {
   names_ <- tolower(raw_names)
   for (n in unique(names_[duplicated(names_)])) {
     original <- raw_names[match(n, names_)]
-    add("notice", "duplicate_name", sprintf("More than one player is named \"%s\".", original))
+    add(
+      "notice",
+      "duplicate_name",
+      sprintf("More than one player is named \"%s\".", original)
+    )
   }
 
   # Batting-order gender rule, checked forwards and then around the turn, because the
@@ -45,9 +78,15 @@ validate_lineup <- function(cfg, lineup, team_label) {
     seen <- character()
     for (i in seq_along(g)) {
       if (!next_batter_gender_ok(cfg, seen, g[i])) {
-        add("violation", "batting_gender_order",
-            sprintf("Batting order: %s (slot %d) breaks the gender rule.",
-                    batters[[i]]$name, i))
+        add(
+          "violation",
+          "batting_gender_order",
+          sprintf(
+            "Batting order: %s (slot %d) breaks the gender rule.",
+            batters[[i]]$name,
+            i
+          )
+        )
         break
       }
       seen <- c(seen, g[i])
@@ -65,9 +104,16 @@ validate_lineup <- function(cfg, lineup, team_label) {
       seen2 <- utils::tail(g, n)
       for (i in seq_len(min(as.integer(n), length(g)))) {
         if (!next_batter_gender_ok(cfg, seen2, g[i])) {
-          add("violation", "batting_gender_wrap", sprintf(
-            "Batting order: %s (slot %d) breaks the gender rule where the order wraps around from slot %d.",
-            batters[[i]]$name, i, length(g)))
+          add(
+            "violation",
+            "batting_gender_wrap",
+            sprintf(
+              "Batting order: %s (slot %d) breaks the gender rule where the order wraps around from slot %d.",
+              batters[[i]]$name,
+              i,
+              length(g)
+            )
+          )
           break
         }
         seen2 <- c(seen2, g[i])
@@ -77,12 +123,29 @@ validate_lineup <- function(cfg, lineup, team_label) {
 
   fielders <- Filter(function(p) !is.na(.position_category(p$position)), lineup)
   fc <- cfg$fielding$fielder_count
-  if (!is.na(fc) && length(fielders) > 0L && length(fielders) != fc)
-    add("notice", "fielder_count", sprintf("%d fielders assigned; this ruleset expects %d.",
-                                           length(fielders), fc))
+  # fielder_count is a maximum: fielding short is allowed, only an oversized field warns.
+  if (!is.na(fc) && length(fielders) > fc) {
+    add(
+      "notice",
+      "fielder_count",
+      sprintf(
+        "%d fielders assigned; this ruleset allows at most %d.",
+        length(fielders),
+        fc
+      )
+    )
+  }
 
-  for (v in evaluate_fielding(cfg, lineup)) add(v$severity, v$code, v$message)
+  for (v in evaluate_fielding(cfg, lineup)) {
+    add(v$severity, v$code, v$message)
+  }
 
-  list(ok = !any(vapply(items, function(i) identical(i$severity, "violation"), logical(1))),
-       items = items)
+  list(
+    ok = !any(vapply(
+      items,
+      function(i) identical(i$severity, "violation"),
+      logical(1)
+    )),
+    items = items
+  )
 }

@@ -222,8 +222,8 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
       }
       outcome <- res$outcome
       rows <- disposition_rows(s)
-      # Bases empty: only the batter is involved, so there is nothing to ask.
-      if (length(rows) <= 1L) {
+      # Bases empty, or a home run (everyone scores): nothing to ask, commit directly.
+      if (length(rows) <= 1L || outcome %in% c("HR", "ITPHR")) {
         prefill <- disposition_prefill(s, outcome)
         commit_payload(disposition_payload(s, outcome, prefill))
         return(invisible())
@@ -262,8 +262,7 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
         commit_payload(disposition_payload(
           s,
           pd$outcome,
-          choices,
-          rbi = input$disp_rbi
+          choices
         ))
       },
       ignoreInit = TRUE
@@ -299,9 +298,16 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
       }
     })
 
+    # Tracks which substitution kind's modal is currently open, or NULL when closed.
+    # The modal renders its own selectInput("sub_kind"), which re-sets input$sub_kind
+    # every time it draws; without this guard the sub_kind observer would re-fire on
+    # that echo and reopen the modal on a loop (and keep reopening after close).
+    sub_open_kind <- reactiveVal(NULL)
+
     observeEvent(
       input$sub,
       {
+        sub_open_kind("batting")
         showModal(substitution_modal_ui(
           session$ns,
           isolate(state()),
@@ -311,10 +317,16 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
       ignoreInit = TRUE
     )
 
-    # Switching the type re-renders the modal with the right fields.
+    # Switching the type re-renders the modal with the right fields — but only when the
+    # user actually changed it, not when the modal's own render echoed the value back.
     observeEvent(
       input$sub_kind,
       {
+        open <- isolate(sub_open_kind())
+        if (is.null(open) || identical(open, input$sub_kind)) {
+          return(invisible())
+        }
+        sub_open_kind(input$sub_kind)
         showModal(substitution_modal_ui(
           session$ns,
           isolate(state()),
@@ -339,6 +351,7 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
           return(invisible())
         }
         removeModal()
+        sub_open_kind(NULL)
         appended <- storage$append_event(game_id, res)
         events(c(isolate(events()), list(appended)))
         storage$save_snapshot(game_id, isolate(state()))

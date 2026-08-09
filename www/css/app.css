@@ -60,3 +60,11 @@
 }
 
 .bw-secondary-actions { justify-content: flex-end; }
+
+/* Rules panels: one control per line on phones so nothing is cramped. */
+@media (max-width: 576px) {
+  .bw-rules .bslib-grid { grid-template-columns: 1fr !important; }
+}
+
+/* Lineup up/down reorder buttons: compact stacked arrows. */
+.bw-move .bw-move-btn { padding: .05rem .3rem; line-height: 1; font-size: .7rem; }

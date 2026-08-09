@@ -202,14 +202,16 @@ advance_half <- function(state) {
       function(p) !is.na(p$order_slot),
       state$lineups[[state$batting_team]]
     ))
-    if (n_bat > 0 && n_bat != bs) {
+    # batting_size is a maximum: a short lineup (e.g. 9 under a 10-batter rule) is
+    # always allowed; only batting more than the rule permits is worth a notice.
+    if (n_bat > bs) {
       w <- c(
         w,
         list(list(
           severity = "notice",
           code = "batting_size",
           message = sprintf(
-            "Batting team has %d batters; rule expects %d.",
+            "Batting team has %d batters; rule allows at most %d.",
             n_bat,
             bs
           )
@@ -224,14 +226,16 @@ advance_half <- function(state) {
       function(p) !is.na(.position_category(p$position)),
       state$lineups[[def_team]]
     ))
-    if (n_field > 0L && n_field != fc) {
+    # fielder_count is a maximum too: fielding short (9 under a 10-fielder rule) is
+    # allowed; only more fielders than the rule permits warns.
+    if (n_field > fc) {
       w <- c(
         w,
         list(list(
           severity = "notice",
           code = "fielder_count",
           message = sprintf(
-            "%d fielders have positions; rule expects %d.",
+            "%d fielders have positions; rule allows at most %d.",
             n_field,
             fc
           )

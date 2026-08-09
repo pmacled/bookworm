@@ -178,7 +178,15 @@ collect_ruleset <- function(input) {
 }
 
 .lineup_table_head <- function(show_gender) {
-  cols <- c("#", "Name", if (show_gender) "Gender", "Jersey", "Position", "")
+  cols <- c(
+    "#",
+    "Name",
+    if (show_gender) "Gender",
+    "Jersey",
+    "Position",
+    "",
+    ""
+  )
   tags$thead(tags$tr(!!!lapply(cols, function(h) tags$th(scope = "col", h))))
 }
 
@@ -227,218 +235,229 @@ setup_ui <- function(id) {
       selected = "anything_goes"
     ),
     uiOutput(ns("preset_desc")),
-    accordion(
-      open = FALSE,
-      accordion_panel(
-        "Advanced rules",
-        layout_columns(
-          col_widths = c(6, 6),
-          numericInput(ns("start_balls"), "Starting balls", 0, 0, 3),
-          numericInput(ns("start_strikes"), "Starting strikes", 0, 0, 2)
-        ),
-        selectInput(
-          ns("foul_out"),
-          "Foul with 2 strikes",
-          c(
-            "Out" = "out",
-            "One courtesy foul" = "one_courtesy_foul",
-            "Unlimited (never an out)" = "unlimited"
-          ),
-          selected = "unlimited"
-        ),
-        selectInput(
-          ns("batting_size"),
-          "Number of batters",
-          c("Unlimited (everyone bats)" = "0", "9" = "9", "10" = "10")
-        ),
-        selectInput(
-          ns("gender_rule"),
-          "Batting gender rule",
-          c(
-            "None" = "none",
-            "Max males in a row" = "max_consecutive_males",
-            "Max of either gender in a row" = "max_consecutive_same_gender",
-            "At least one F every N" = "min_females_per_n"
-          )
-        ),
-        conditionalPanel(
-          sprintf("input['%s'] != 'none'", ns("gender_rule")),
-          numericInput(ns("gender_n"), "N", 1, 1, 12)
-        ),
-        layout_columns(
-          col_widths = c(4, 4, 4),
-          numericInput(ns("innings"), "Innings", 7, 1, 12),
-          numericInput(ns("fielder_count"), "Fielders (0 = any)", 0, 0, 12),
-          numericInput(ns("run_cap"), "Run cap/inning (0 = none)", 0, 0, 30)
-        ),
-        layout_columns(
-          col_widths = c(6, 6),
-          checkboxInput(
-            ns("cap_same_play"),
-            "Runs on the same play all count",
-            TRUE
-          ),
-          checkboxInput(
-            ns("cap_ends_half"),
-            "Reaching the cap ends the half-inning",
-            TRUE
-          )
-        ),
-        checkboxInput(ns("open_last"), "No cap in the last inning", TRUE)
-      ),
-
-      accordion_panel(
-        "Mercy rule",
-        tags$p(
-          class = "text-muted small",
-          "The game ends as soon as any row is satisfied. Leave a differential at 0 to disable that row."
-        ),
-        layout_columns(
-          col_widths = c(6, 6),
-          numericInput(ns("mercy_after_1"), "After inning", 3, 1, 12),
-          numericInput(
-            ns("mercy_diff_1"),
-            "Run differential (0 = off)",
-            0,
-            0,
-            50
-          )
-        ),
-        layout_columns(
-          col_widths = c(6, 6),
-          numericInput(ns("mercy_after_2"), "After inning", 4, 1, 12),
-          numericInput(
-            ns("mercy_diff_2"),
-            "Run differential (0 = off)",
-            0,
-            0,
-            50
-          )
-        ),
-        layout_columns(
-          col_widths = c(6, 6),
-          numericInput(ns("mercy_after_3"), "After inning", 5, 1, 12),
-          numericInput(
-            ns("mercy_diff_3"),
-            "Run differential (0 = off)",
-            0,
-            0,
-            50
-          )
-        )
-      ),
-
-      accordion_panel(
-        "Home runs",
-        layout_columns(
-          col_widths = c(4, 4, 4),
-          numericInput(
-            ns("hr_limit"),
-            "Over-the-fence limit (0 = none)",
-            0,
-            0,
-            30
-          ),
-          numericInput(
-            ns("hr_limit_m"),
-            "Limit for men (0 = use overall)",
-            0,
-            0,
-            30
-          ),
-          numericInput(
-            ns("hr_limit_f"),
-            "Limit for women (0 = use overall)",
-            0,
-            0,
-            30
-          )
-        ),
-        selectInput(
-          ns("hr_over"),
-          "A home run past the limit is",
-          c(
-            "An out" = "out",
-            "A ground-rule double" = "ground_rule_double",
-            "A single" = "single"
-          )
-        ),
-        checkboxInput(
-          ns("hr_itp_counts"),
-          "Inside-the-park home runs count toward the limit",
-          FALSE
-        )
-      ),
-
-      accordion_panel(
-        "Pinch / courtesy runners",
-        layout_columns(
-          col_widths = c(4, 4, 4),
-          numericInput(
-            ns("pr_inning"),
-            "Max per inning (0 = unlimited)",
-            0,
-            0,
-            12
-          ),
-          numericInput(ns("pr_game"), "Max per game (0 = unlimited)", 0, 0, 30),
-          numericInput(
-            ns("pr_player"),
-            "Max per player (0 = unlimited)",
-            0,
-            0,
-            12
-          )
-        ),
-        selectInput(
-          ns("pr_elig"),
-          "Who may run",
-          c(
-            "Anyone" = "anyone",
-            "Same gender" = "same_gender",
-            "The last out" = "last_out",
-            "The last same-gender out" = "last_same_gender_out"
-          )
-        ),
-        selectInput(
-          ns("pr_for"),
-          "Who may be run for",
-          c("Anyone" = "anyone", "Pitcher or catcher only" = "pitcher_catcher")
-        )
-      ),
-
-      accordion_panel(
-        "Fielding gender rules",
-        selectInput(
-          ns("fielding_preset"),
-          "Preset",
-          c(
-            "None" = "none",
-            "Standard coed (10-player)" = "standard_coed",
-            "Custom" = "custom"
-          )
-        ),
-        conditionalPanel(
-          sprintf("input['%s'] == 'custom'", ns("fielding_preset")),
+    tags$div(
+      class = "bw-rules",
+      accordion(
+        open = FALSE,
+        accordion_panel(
+          "Advanced rules",
           layout_columns(
             col_widths = c(6, 6),
-            numericInput(ns("min_females"), "Min females in field", 0, 0, 10),
+            numericInput(ns("start_balls"), "Starting balls", 0, 0, 3),
+            numericInput(ns("start_strikes"), "Starting strikes", 0, 0, 2)
+          ),
+          selectInput(
+            ns("foul_out"),
+            "Foul with 2 strikes",
+            c(
+              "Out" = "out",
+              "One courtesy foul" = "one_courtesy_foul",
+              "Unlimited (never an out)" = "unlimited"
+            ),
+            selected = "unlimited"
+          ),
+          selectInput(
+            ns("batting_size"),
+            "Number of batters",
+            c("Unlimited (everyone bats)" = "0", "9" = "9", "10" = "10")
+          ),
+          selectInput(
+            ns("gender_rule"),
+            "Batting gender rule",
+            c(
+              "None" = "none",
+              "Max males in a row" = "max_consecutive_males",
+              "Max of either gender in a row" = "max_consecutive_same_gender"
+            )
+          ),
+          conditionalPanel(
+            sprintf("input['%s'] != 'none'", ns("gender_rule")),
+            numericInput(ns("gender_n"), "N", 1, 1, 12)
+          ),
+          layout_columns(
+            col_widths = c(4, 4, 4),
+            numericInput(ns("innings"), "Innings", 7, 1, 12),
+            numericInput(ns("fielder_count"), "Fielders (0 = any)", 0, 0, 12),
+            numericInput(ns("run_cap"), "Run cap/inning (0 = none)", 0, 0, 30)
+          ),
+          layout_columns(
+            col_widths = c(6, 6),
+            checkboxInput(
+              ns("cap_same_play"),
+              "Runs on the same play all count",
+              TRUE
+            ),
+            checkboxInput(
+              ns("cap_ends_half"),
+              "Reaching the cap ends the half-inning",
+              TRUE
+            )
+          ),
+          checkboxInput(ns("open_last"), "No cap in the last inning", TRUE)
+        ),
+
+        accordion_panel(
+          "Mercy rule",
+          tags$p(
+            class = "text-muted small",
+            "The game ends as soon as any row is satisfied. Leave a differential at 0 to disable that row."
+          ),
+          layout_columns(
+            col_widths = c(6, 6),
+            numericInput(ns("mercy_after_1"), "After inning", 3, 1, 12),
             numericInput(
-              ns("max_males"),
-              "Max males in field (0 = none)",
+              ns("mercy_diff_1"),
+              "Run differential (0 = off)",
+              0,
+              0,
+              50
+            )
+          ),
+          layout_columns(
+            col_widths = c(6, 6),
+            numericInput(ns("mercy_after_2"), "After inning", 4, 1, 12),
+            numericInput(
+              ns("mercy_diff_2"),
+              "Run differential (0 = off)",
+              0,
+              0,
+              50
+            )
+          ),
+          layout_columns(
+            col_widths = c(6, 6),
+            numericInput(ns("mercy_after_3"), "After inning", 5, 1, 12),
+            numericInput(
+              ns("mercy_diff_3"),
+              "Run differential (0 = off)",
+              0,
+              0,
+              50
+            )
+          )
+        ),
+
+        accordion_panel(
+          "Home runs",
+          layout_columns(
+            col_widths = c(4, 4, 4),
+            numericInput(
+              ns("hr_limit"),
+              "Over-the-fence limit (0 = none)",
+              0,
+              0,
+              30
+            ),
+            numericInput(
+              ns("hr_limit_m"),
+              "Limit for men (0 = use overall)",
+              0,
+              0,
+              30
+            ),
+            numericInput(
+              ns("hr_limit_f"),
+              "Limit for women (0 = use overall)",
+              0,
+              0,
+              30
+            )
+          ),
+          selectInput(
+            ns("hr_over"),
+            "A home run past the limit is",
+            c(
+              "An out" = "out",
+              "A ground-rule double" = "ground_rule_double",
+              "A single" = "single"
+            )
+          ),
+          checkboxInput(
+            ns("hr_itp_counts"),
+            "Inside-the-park home runs count toward the limit",
+            FALSE
+          )
+        ),
+
+        accordion_panel(
+          "Pinch / courtesy runners",
+          layout_columns(
+            col_widths = c(4, 4, 4),
+            numericInput(
+              ns("pr_inning"),
+              "Max per inning (0 = unlimited)",
+              0,
+              0,
+              12
+            ),
+            numericInput(
+              ns("pr_game"),
+              "Max per game (0 = unlimited)",
+              0,
+              0,
+              30
+            ),
+            numericInput(
+              ns("pr_player"),
+              "Max per player (0 = unlimited)",
               0,
               0,
               12
             )
           ),
-          layout_columns(
-            col_widths = c(4, 4, 4),
-            numericInput(ns("of_females"), "Min F outfield", 0, 0, 5),
-            numericInput(ns("if_females"), "Min F infield", 0, 0, 5),
-            selectInput(
-              ns("battery_mode"),
-              "Pitcher/Catcher",
-              c("Any" = "any", "Opposite genders" = "one")
+          selectInput(
+            ns("pr_elig"),
+            "Who may run",
+            c(
+              "Anyone" = "anyone",
+              "Same gender" = "same_gender",
+              "The last out" = "last_out",
+              "The last same-gender out" = "last_same_gender_out"
+            )
+          ),
+          selectInput(
+            ns("pr_for"),
+            "Who may be run for",
+            c(
+              "Anyone" = "anyone",
+              "Pitcher or catcher only" = "pitcher_catcher"
+            )
+          )
+        ),
+
+        accordion_panel(
+          "Fielding gender rules",
+          selectInput(
+            ns("fielding_preset"),
+            "Preset",
+            c(
+              "None" = "none",
+              "Standard coed (10-player)" = "standard_coed",
+              "Custom" = "custom"
+            )
+          ),
+          conditionalPanel(
+            sprintf("input['%s'] == 'custom'", ns("fielding_preset")),
+            layout_columns(
+              col_widths = c(6, 6),
+              numericInput(ns("min_females"), "Min females in field", 0, 0, 10),
+              numericInput(
+                ns("max_males"),
+                "Max males in field (0 = none)",
+                0,
+                0,
+                12
+              )
+            ),
+            layout_columns(
+              col_widths = c(4, 4, 4),
+              numericInput(ns("of_females"), "Min F outfield", 0, 0, 5),
+              numericInput(ns("if_females"), "Min F infield", 0, 0, 5),
+              selectInput(
+                ns("battery_mode"),
+                "Pitcher/Catcher",
+                c("Any" = "any", "Opposite genders" = "one")
+              )
             )
           )
         )
@@ -512,6 +531,19 @@ setup_ui <- function(id) {
       ns(paste0(prefix, "_del_", id)),
       "×",
       class = "btn-sm btn-outline-danger"
+    )),
+    cell(tags$div(
+      class = "bw-move btn-group-vertical",
+      actionButton(
+        ns(paste0(prefix, "_up_", id)),
+        HTML("&#9650;"),
+        class = "btn-sm btn-outline-secondary bw-move-btn"
+      ),
+      actionButton(
+        ns(paste0(prefix, "_down_", id)),
+        HTML("&#9660;"),
+        class = "btn-sm btn-outline-secondary bw-move-btn"
+      )
     ))
   )
 }
@@ -722,6 +754,60 @@ setup_server <- function(id) {
       show_gender()
     ))
 
+    # Reads a row's currently-entered values so the tbody can be re-rendered without
+    # losing what the user typed (re-rendering a Shiny input resets it otherwise).
+    .row_values <- function(prefix, id) {
+      list(
+        name = input[[paste0(prefix, "_name_", id)]] %||% "",
+        gender = input[[paste0(prefix, "_gender_", id)]] %||% "M",
+        jersey = .parse_jersey(input[[paste0(prefix, "_jersey_", id)]]),
+        position = {
+          p <- input[[paste0(prefix, "_pos_", id)]] %||% ""
+          if (nzchar(p)) p else NA_character_
+        }
+      )
+    }
+
+    # Re-renders the whole tbody in the current id order, pre-filled from live inputs.
+    .rerender_rows <- function(prefix) {
+      ids <- rows[[prefix]]()
+      sg <- isolate(show_gender())
+      body <- lapply(seq_along(ids), function(i) {
+        .player_row(
+          ns,
+          prefix,
+          ids[i],
+          order = i,
+          show_gender = sg,
+          values = .row_values(prefix, ids[i])
+        )
+      })
+      removeUI(
+        sprintf("#%s > *", ns(paste0(prefix, "_rows"))),
+        multiple = TRUE,
+        immediate = TRUE
+      )
+      insertUI(
+        sprintf("#%s", ns(paste0(prefix, "_rows"))),
+        where = "beforeEnd",
+        ui = tagList(!!!body),
+        immediate = TRUE
+      )
+    }
+
+    # Swaps a row with its neighbour in the given direction and re-renders.
+    .move_row <- function(prefix, id, dir) {
+      ids <- rows[[prefix]]()
+      i <- match(id, ids)
+      j <- i + dir
+      if (is.na(i) || j < 1L || j > length(ids)) {
+        return(invisible())
+      }
+      ids[c(i, j)] <- ids[c(j, i)]
+      rows[[prefix]](ids)
+      .rerender_rows(prefix)
+    }
+
     add_row <- function(prefix) {
       counter(counter() + 1L)
       id <- counter()
@@ -740,11 +826,20 @@ setup_server <- function(id) {
       observeEvent(
         input[[paste0(prefix, "_del_", id)]],
         {
-          removeUI(sprintf("#%s", ns(paste0(prefix, "_row_", id))))
           rows[[prefix]](setdiff(rows[[prefix]](), id))
+          .rerender_rows(prefix)
         },
-        ignoreInit = TRUE,
-        once = TRUE
+        ignoreInit = TRUE
+      )
+      observeEvent(
+        input[[paste0(prefix, "_up_", id)]],
+        .move_row(prefix, id, -1L),
+        ignoreInit = TRUE
+      )
+      observeEvent(
+        input[[paste0(prefix, "_down_", id)]],
+        .move_row(prefix, id, 1L),
+        ignoreInit = TRUE
       )
     }
     observeEvent(input$away_add, add_row("away"), ignoreInit = TRUE)
