@@ -288,8 +288,31 @@ existing signature `(cfg, prev_genders, next_gender)`.
 - `open_last_inning = TRUE` disables the cap from `inning >= innings` onward, unchanged.
 
 **Mercy** (`game_should_end`): evaluate every tier; the game ends if any tier is satisfied
-(`inning >= after_inning && abs(diff) >= differential`). An empty `tiers` list means no
-mercy rule. The old NA-handling special case goes away.
+(`completed_innings >= after_inning && abs(diff) >= differential`, where
+`completed_innings = state$inning - 1`). An empty `tiers` list means no mercy rule. The old
+NA-handling special case goes away.
+
+Two constraints on *when* this is evaluated, both corrections to an earlier draft of this
+section that read `inning >= after_inning` and said nothing about timing:
+
+- `after_inning` counts **completed** innings. `state$inning` is the inning about to be
+  played, so "20 runs after 3 innings" is satisfied at inning 4, not inning 3.
+  `inning >= after_inning` was true in the *top* of inning 3 — after only two finished
+  innings — which fires a full inning early.
+- Mercy is evaluated only at a **half-inning boundary**, never mid-at-bat, because that is
+  what a mercy rule means. The reducer derives the boundary rather than carrying a flag:
+  `advance_half()` is the only thing that leaves both `outs` and `runs_this_half` at zero,
+  and any mid-half state with `runs_this_half == 0` necessarily has the same score as the
+  boundary that opened the half, so evaluating there can never reach a different verdict.
+
+Regulation completion (`inning > cfg$innings`) is deliberately *not* gated on the boundary;
+it never reverts on its own.
+
+**Game status** is **derived** from the folded state on every event, not latched. Setting
+`status <- "final"` once and never clearing it made "final" a one-way trap: the tracking
+module refuses all input while final and there is no UI to reopen a game. Deriving it means
+an Undo, or a differential that shrinks again, reopens the game automatically — and because
+the load path is `fold_events()`, recomputing costs nothing.
 
 **Home run limit** (new `evaluate_home_run_limit(cfg, state, batter, outcome)`): counts
 `HR` outcomes already recorded by that team this game (and `ITPHR` too when
