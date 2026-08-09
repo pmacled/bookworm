@@ -6,7 +6,7 @@ supabase_configured <- function() {
     "SUPABASE_DB_USER",
     "SUPABASE_DB_PASSWORD",
     "SUPABASE_URL",
-    "SUPABASE_ANON_KEY"
+    "SUPABASE_PUBLISHABLE_KEY"
   )
   all(nzchar(Sys.getenv(vars)))
 }
@@ -87,7 +87,7 @@ friendly_auth_error <- function(msg) {
     {
       resp <- httr2::request(paste0(base, "/auth/v1/", path)) |>
         httr2::req_headers(
-          apikey = Sys.getenv("SUPABASE_ANON_KEY"),
+          apikey = Sys.getenv("SUPABASE_PUBLISHABLE_KEY"),
           "Content-Type" = "application/json"
         ) |>
         httr2::req_body_json(list(email = email, password = password)) |>
