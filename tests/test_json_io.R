@@ -28,3 +28,18 @@ test_that("round trip survives an out event (reached NA becomes null then back)"
   expect_equal(s$outs, 1L)
   expect_equal(s$bases$first, "a1")
 })
+
+test_that("a player with NA order_slot survives the JSON round trip", {
+  # A substitute registered without a batting slot serialises order_slot as null.
+  # simplifyVector = FALSE reads it back as NULL; the reducer must not choke on it.
+  sub_lineup <- c(mk_lineup("a")[1:3],
+    list(make_player("a9", "Sub", "M", 22L, NA_integer_, "2B")))
+  gs <- new_event("game_start", list(ruleset = default_ruleset_config(), first_bat = "away",
+    home = list(team_id = "H", name = "Home", lineup = mk_lineup("h")),
+    away = list(team_id = "A", name = "Away", lineup = sub_lineup)), seq = 1L)
+  back <- game_from_json(game_to_json(list(gs)))
+  s <- fold_events(back$events)                    # must NOT error
+  slots <- vapply(s$lineups$away, function(p) p$order_slot, integer(1))
+  expect_true(is.na(slots[[4]]))                   # NA, not a phantom NULL
+  expect_equal(s$current_batter$player_id, "a1")   # batter derivation still works
+})

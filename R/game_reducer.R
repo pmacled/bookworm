@@ -272,8 +272,8 @@ apply_event <- function(state, evt) {
   if (type == "game_start") {
     p <- evt$payload
     state <- initial_game_state(p$ruleset %||% state$ruleset)
-    state$lineups$home <- p$home$lineup
-    state$lineups$away <- p$away$lineup
+    state$lineups$home <- .normalize_lineup(p$home$lineup)
+    state$lineups$away <- .normalize_lineup(p$away$lineup)
     state$teams <- list(
       home = p$home[c("team_id", "name")],
       away = p$away[c("team_id", "name")]
@@ -316,7 +316,7 @@ apply_event <- function(state, evt) {
   }
   if (type == "lineup_set") {
     team <- evt$payload$team
-    state$lineups[[team]] <- evt$payload$lineup %||% list()
+    state$lineups[[team]] <- .normalize_lineup(evt$payload$lineup)
     n <- length(Filter(function(p) !is.na(p$order_slot), state$lineups[[team]]))
     if (n > 0L) {
       state$batting_index[[team]] <- state$batting_index[[team]] %% n
@@ -363,6 +363,30 @@ fold_events <- function(events, ruleset = NULL) {
 }
 .base_slot <- function(n) {
   c("1" = "first", "2" = "second", "3" = "third")[as.character(n)]
+}
+
+# A persisted NA_integer_ order_slot round-trips through JSON as null, which
+# fromJSON(simplifyVector = FALSE) reads back as NULL. Downstream, !is.na(p$order_slot)
+# on a NULL returns logical(0), which misaligns Filter() and errors inside the vapply
+# in .set_current_batter(). game_start's lineups already had this latent bug; 2.1's
+# lineup_set and 2.2's lineup/substitution modals give it new entry points. Re-run each
+# player through make_player() as it enters state so every field is a length-1 scalar of
+# the right type -- NULL integer fields collapse back to NA_integer_.
+.normalize_player <- function(p) {
+  if (is.null(p)) {
+    return(NULL)
+  }
+  make_player(
+    p$player_id,
+    p$name,
+    p$gender,
+    jersey_number = p$jersey_number %||% NA_integer_,
+    order_slot = p$order_slot %||% NA_integer_,
+    position = p$position %||% NA_character_
+  )
+}
+.normalize_lineup <- function(lineup) {
+  lapply(lineup %||% list(), .normalize_player)
 }
 
 apply_plate_appearance <- function(state, evt) {

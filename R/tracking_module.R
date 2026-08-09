@@ -122,7 +122,12 @@ tracking_ui <- function(id) {
     div(
       class = "d-flex gap-2 mt-2",
       actionButton(ns("undo"), "Undo", class = "btn-warning"),
-      actionButton(ns("sub"), "Substitution", class = "btn-outline-secondary")
+      actionButton(ns("sub"), "Substitution", class = "btn-outline-secondary"),
+      actionButton(
+        ns("edit_lineup"),
+        "Edit lineup",
+        class = "btn-outline-secondary"
+      )
     ),
     navset_tab(
       nav_panel("Scorebook", uiOutput(ns("scorebook"))),
@@ -318,6 +323,46 @@ tracking_server <- function(id, storage, game_id, game_start_event) {
         }
         removeModal()
         appended <- storage$append_event(game_id, res)
+        events(c(isolate(events()), list(appended)))
+        storage$save_snapshot(game_id, isolate(state()))
+      },
+      ignoreInit = TRUE
+    )
+
+    lineup_team <- reactiveVal("away")
+    LINEUP_ROWS <- 12L
+
+    observeEvent(
+      input$edit_lineup,
+      {
+        s <- isolate(state())
+        team <- s$batting_team
+        lineup_team(team)
+        showModal(lineup_modal_ui(
+          session$ns,
+          s,
+          team,
+          show_gender = !ruleset_is_genderless(s$ruleset),
+          n_rows = LINEUP_ROWS
+        ))
+      },
+      ignoreInit = TRUE
+    )
+
+    observeEvent(
+      input$lu_commit,
+      {
+        s <- isolate(state())
+        team <- isolate(lineup_team())
+        n <- max(LINEUP_ROWS, length(s$lineups[[team]]) + 3L)
+        evt <- build_lineup_set_event(
+          input,
+          team,
+          seq_len(n),
+          show_gender = !ruleset_is_genderless(s$ruleset)
+        )
+        removeModal()
+        appended <- storage$append_event(game_id, evt)
         events(c(isolate(events()), list(appended)))
         storage$save_snapshot(game_id, isolate(state()))
       },
