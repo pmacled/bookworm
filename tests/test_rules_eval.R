@@ -110,6 +110,7 @@ test_that("apply_run_cap reports cap_hit accurately when the cap is not reached"
 })
 
 test_that("mercy ends the game", {
+  # inning 5 / top = four *completed* innings, so an after_inning = 4 tier applies.
   cfg <- coerce_ruleset_config(list(mercy_rule = list(differential = 10L, after_inning = 4L)))
   st <- list(inning = 5L, half = "top", score = list(home = 15L, away = 3L),
              ruleset = cfg, outs = 0L)
@@ -140,8 +141,8 @@ test_that("game_should_end does not crash on a mercy tier missing after_inning e
   # may omit a key outright, so t$after_inning is NULL, not NA.
   cfg <- default_ruleset_config()
   cfg$mercy_rule$tiers <- list(list(differential = 10L))
-  st <- list(inning = 1L, half = "top", score = list(home = 15L, away = 3L),
-             ruleset = cfg, outs = 0L)
+  st <- list(inning = 2L, half = "top", score = list(home = 15L, away = 3L),
+             ruleset = cfg, outs = 0L)   # one completed inning; after_inning defaults to 1
   expect_true(game_should_end(cfg, st))   # must not error; defaults after_inning to 1
 })
 
@@ -150,17 +151,45 @@ usa_mercy <- function() coerce_ruleset_config(list(innings = 7L, mercy_rule = li
   list(after_inning = 4L, differential = 15L),
   list(after_inning = 5L, differential = 10L)))))
 
+# A half-inning boundary: outs and this half's runs are both zero, which is exactly
+# the state advance_half() leaves behind. `inning` here is the inning ABOUT to be
+# played, so completed innings = inning - 1.
 st_at <- function(cfg, inning, home, away)
   list(inning = inning, half = "top", score = list(home = home, away = away),
-       ruleset = cfg, outs = 0L)
+       ruleset = cfg, outs = 0L, runs_this_half = 0L)
 
 test_that("any satisfied mercy tier ends the game", {
   cfg <- usa_mercy()
-  expect_true(game_should_end(cfg,  st_at(cfg, 3L, 25L, 3L)))   # 22 after 3
-  expect_false(game_should_end(cfg, st_at(cfg, 3L, 15L, 3L)))   # 12 after 3: not yet
-  expect_true(game_should_end(cfg,  st_at(cfg, 4L, 19L, 3L)))   # 16 after 4
-  expect_true(game_should_end(cfg,  st_at(cfg, 5L, 14L, 3L)))   # 11 after 5
-  expect_false(game_should_end(cfg, st_at(cfg, 5L, 12L, 3L)))   # 9 after 5: not yet
+  expect_true(game_should_end(cfg,  st_at(cfg, 4L, 25L, 3L)))   # 22 after 3 completed
+  expect_false(game_should_end(cfg, st_at(cfg, 4L, 15L, 3L)))   # 12 after 3: not yet
+  expect_true(game_should_end(cfg,  st_at(cfg, 5L, 19L, 3L)))   # 16 after 4 completed
+  expect_true(game_should_end(cfg,  st_at(cfg, 6L, 14L, 3L)))   # 11 after 5 completed
+  expect_false(game_should_end(cfg, st_at(cfg, 6L, 12L, 3L)))   # 9 after 5: not yet
+})
+
+test_that("after_inning counts COMPLETED innings, so a tier cannot fire an inning early", {
+  # `inning >= after_inning` was an off-by-one: it is already true in the *top* of
+  # inning 3, i.e. after only two finished innings, whereas "20 runs after 3
+  # innings" means three finished innings. Harmless until .USA_MERCY shipped in
+  # the two Standard presets.
+  cfg <- usa_mercy()
+  expect_false(game_should_end(cfg, st_at(cfg, 3L, 25L, 3L)))   # top of the 3rd: only 2 done
+  expect_true(game_should_end(cfg,  st_at(cfg, 4L, 25L, 3L)))   # top of the 4th: 3 done
+})
+
+test_that("mercy is not evaluated mid-half", {
+  # Same score, same inning, but the half is in progress (an out has been made, or
+  # runs have scored this half). A mercy rule ends a game at a half-inning boundary,
+  # not in the middle of an at-bat.
+  cfg <- usa_mercy()
+  boundary <- st_at(cfg, 4L, 25L, 3L)
+  expect_true(game_should_end(cfg, boundary))
+
+  mid_outs <- boundary; mid_outs$outs <- 1L
+  expect_false(game_should_end(cfg, mid_outs))
+
+  mid_runs <- boundary; mid_runs$runs_this_half <- 2L
+  expect_false(game_should_end(cfg, mid_runs))
 })
 
 test_that("a mercy tier fires when the differential is exactly at the threshold", {
@@ -169,16 +198,24 @@ test_that("a mercy tier fires when the differential is exactly at the threshold"
   # would catch `diff >= diff_needed` degrading to `diff > diff_needed`. This
   # exercises the boundary directly: diff is exactly 20 against the 20-after-3 tier.
   cfg <- usa_mercy()
-  expect_true(game_should_end(cfg, st_at(cfg, 3L, 23L, 3L)))   # 20 after 3: exactly at threshold
+  expect_true(game_should_end(cfg, st_at(cfg, 4L, 23L, 3L)))   # 20 after 3: exactly at threshold
 })
 
 test_that("mercy works in either direction", {
   cfg <- usa_mercy()
-  expect_true(game_should_end(cfg, st_at(cfg, 5L, 3L, 14L)))
+  expect_true(game_should_end(cfg, st_at(cfg, 6L, 3L, 14L)))
 })
 
 test_that("no mercy tiers means only regulation ends the game", {
   cfg <- coerce_ruleset_config(list(innings = 7L))
   expect_false(game_should_end(cfg, st_at(cfg, 5L, 40L, 0L)))
   expect_true(game_should_end(cfg,  st_at(cfg, 8L, 1L, 0L)))
+})
+
+test_that("regulation completion is not gated on the half-inning boundary", {
+  # Mercy is; running out of innings is not -- once inning > innings the game is
+  # over and stays over however the state is inspected.
+  cfg <- coerce_ruleset_config(list(innings = 7L))
+  st <- st_at(cfg, 8L, 4L, 1L); st$outs <- 2L; st$runs_this_half <- 3L
+  expect_true(game_should_end(cfg, st))
 })

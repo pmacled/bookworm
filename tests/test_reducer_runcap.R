@@ -106,3 +106,36 @@ test_that("the run-cap notice survives the half ending via cap_ends_half on the 
   codes <- vapply(s$warnings, function(w) w$code, character(1))
   expect_true("run_cap" %in% codes)
 })
+
+# --- Finding 7: the notice must describe the behaviour the scorer actually got ---
+
+run_cap_notice <- function(s) {
+  hit <- Filter(function(w) identical(w$code, "run_cap"), s$warnings)
+  if (!length(hit)) return(NA_character_)
+  hit[[1]]$message
+}
+
+test_that("under same_play_runs_count the notice says same-play runs still count", {
+  cfg <- cap_cfg(run_cap = list(per_inning = 2L, open_last_inning = FALSE,
+                                same_play_runs_count = TRUE, cap_ends_half = TRUE))
+  s <- fold_events(list(start_with(cfg),
+    pa("a1", "HR", 4L, list(adv("a1", 0L, 4L, scored = TRUE)), seq = 2L),
+    pa("a2", "HR", 4L, list(adv("a2", 0L, 4L, scored = TRUE)), seq = 3L)))
+  expect_match(run_cap_notice(s), "Run cap of 2 reached this inning.", fixed = TRUE)
+  expect_match(run_cap_notice(s), "same at-bat", fixed = TRUE)
+})
+
+test_that("under clamp semantics the notice does NOT claim same-play runs count", {
+  # same_play_runs_count = FALSE really does clamp a grand slam 4 -> 3, so the
+  # owner's wording states the exact opposite of what the scorer just saw.
+  cfg <- cap_cfg(run_cap = list(per_inning = 3L, open_last_inning = FALSE,
+                                same_play_runs_count = FALSE, cap_ends_half = TRUE))
+  s <- fold_events(list(start_with(cfg),
+    pa("a1", "HR", 4L, list(
+         adv("x1", 1L, 4L, scored = TRUE), adv("x2", 2L, 4L, scored = TRUE),
+         adv("x3", 3L, 4L, scored = TRUE), adv("a1", 0L, 4L, scored = TRUE)), seq = 2L)))
+  expect_equal(s$score$away, 3L)                      # the slam WAS clamped 4 -> 3
+  expect_match(run_cap_notice(s), "Run cap of 3 reached this inning.", fixed = TRUE)
+  expect_false(grepl("same at-bat", run_cap_notice(s), fixed = TRUE))
+  expect_match(run_cap_notice(s), "did not count", fixed = TRUE)
+})

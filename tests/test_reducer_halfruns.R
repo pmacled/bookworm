@@ -58,8 +58,10 @@ test_that("half_runs surfaces a run_cap notice when the cap applies to the entry
     new_event("half_runs", list(team = "away", runs = 9L), seq = 2L)))
   hit <- Filter(function(w) identical(w$code, "run_cap"), s$warnings)
   expect_length(hit, 1L)
-  # The scorer needs to know both the cap value and why their 9 became 5:
-  # bulk entries don't have at-bats, so nothing beyond the cap counts.
+  # The scorer needs to know the cap value...
   expect_match(hit[[1]]$message, "5", fixed = TRUE)
-  expect_match(hit[[1]]$message, "same at-bat")
+  # ...but NOT the "runs in the same at-bat still count" caveat. A bulk
+  # half-inning entry has no at-bats and is always clamped, so that sentence
+  # would describe behaviour the scorer did not get.
+  expect_false(grepl("at-bat", hit[[1]]$message, fixed = TRUE))
 })

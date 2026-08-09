@@ -359,18 +359,35 @@ apply_run_cap <- function(cfg, runs_before, runs_on_play, inning) {
   list(runs = as.integer(runs), cap_hit = total >= cap)
 }
 
+# A mercy rule ends a game at a half-inning boundary, never mid-at-bat. Rather than
+# carry a "a half just ended" flag through the event fold, derive it: advance_half()
+# is the only thing that leaves both outs and runs_this_half at zero, and any
+# mid-half state that also has runs_this_half == 0 necessarily has the *same score*
+# as the boundary that opened the half -- so evaluating there can never reach a
+# different verdict than the boundary already did.
+.at_half_boundary <- function(state)
+  isTRUE(as.integer(state$outs %||% 0L) == 0L) &&
+    isTRUE(as.integer(state$runs_this_half %||% 0L) == 0L)
+
 game_should_end <- function(cfg, state) {
-  diff <- abs(state$score$home - state$score$away)
-  for (t in cfg$mercy_rule$tiers %||% list()) {
-    # %||% NA_integer_ first: a tier missing a key entirely (t$after_inning is
-    # then NULL, not NA) must not reach `is.na(t$after_inning)` -- and a
-    # persisted event never re-validates, so a malformed tier is reachable here.
-    after <- t$after_inning %||% NA_integer_
-    after <- if (is.na(after)) 1L else after
-    diff_needed <- t$differential %||% NA_integer_
-    if (!is.na(diff_needed) && state$inning >= after && diff >= diff_needed) return(TRUE)
+  # `after_inning` counts COMPLETED innings, and `state$inning` is the inning about
+  # to be played -- so three finished innings is inning 4 (top), not inning 3.
+  # `inning >= after_inning` was an off-by-one that fired a full inning early.
+  completed <- as.integer(state$inning) - 1L
+  if (.at_half_boundary(state)) {
+    diff <- abs(state$score$home - state$score$away)
+    for (t in cfg$mercy_rule$tiers %||% list()) {
+      # %||% NA_integer_ first: a tier missing a key entirely (t$after_inning is
+      # then NULL, not NA) must not reach `is.na(t$after_inning)` -- and a
+      # persisted event never re-validates, so a malformed tier is reachable here.
+      after <- t$after_inning %||% NA_integer_
+      after <- if (is.na(after)) 1L else after
+      diff_needed <- t$differential %||% NA_integer_
+      if (!is.na(diff_needed) && completed >= after && diff >= diff_needed) return(TRUE)
+    }
   }
-  # Regulation complete: finished the bottom of the final inning.
+  # Regulation complete: finished the bottom of the final inning. Not gated on the
+  # boundary -- once the innings run out the game is over however state is inspected.
   if (state$inning > cfg$innings) return(TRUE)
   FALSE
 }

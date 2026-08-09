@@ -11,7 +11,7 @@ initial_game_state <- function(ruleset = default_ruleset_config()) {
     batting_team = "away", current_batter = NULL,
     pa_log = list(), line_score = list(home = integer(), away = integer()),
     warnings = list(), ruleset = ruleset, cap_hit_last_play = FALSE,
-    pinch_runner_log = list()
+    cap_hit_bulk = FALSE, pinch_runner_log = list()
   )
 }
 
@@ -103,10 +103,18 @@ advance_half <- function(state) {
   }
 
   if (isTRUE(state$cap_hit_last_play)) {
+    # The second sentence has to match what actually happened. Under
+    # same_play_runs_count = FALSE a grand slam really is clamped (4 -> 3 against a
+    # cap of 3), so the "same at-bat" wording would state the opposite; and a bulk
+    # half-inning entry has no at-bats at all and is always clamped, so no caveat
+    # applies. Only the first case is the one the owner's wording describes.
+    detail <- if (isTRUE(state$cap_hit_bulk)) ""
+      else if (isTRUE(cfg$run_cap$same_play_runs_count))
+        " Runs beyond the cap only count if they happen in the same at-bat that reaches it."
+      else " Runs beyond the cap did not count."
     w <- c(w, list(list(severity = "notice", code = "run_cap",
-      message = sprintf(
-        "Run cap of %d reached this inning. Runs beyond the cap only count if they happen in the same at-bat that reaches it.",
-        cfg$run_cap$per_inning))))
+      message = sprintf("Run cap of %d reached this inning.%s",
+                        cfg$run_cap$per_inning, detail))))
   }
 
   bs <- cfg$batting_size
@@ -127,10 +135,16 @@ advance_half <- function(state) {
         message = sprintf("%d fielders have positions; rule expects %d.", n_field, fc))))
   }
 
-  if (game_should_end(cfg, state)) {
-    state$status <- "final"
+  # DERIVED, not latched. Latching made "final" a one-way trap: tracking_module
+  # refuses every input once final and nothing ever set it back, so an Undo or a
+  # differential that shrinks again could not reopen the game. Because the load
+  # path is fold_events(), recomputing here is exactly as cheap and always agrees
+  # with the current state. Regulation completion (inning > innings) never reverts
+  # on its own, so it simply stays true.
+  is_final <- game_should_end(cfg, state)
+  state$status <- if (is_final) "final" else "in_progress"
+  if (is_final)
     w <- c(w, list(list(severity = "notice", code = "final", message = "Game is final.")))
-  }
 
   state$warnings <- w
   state
@@ -138,7 +152,7 @@ advance_half <- function(state) {
 
 apply_event <- function(state, evt) {
   type <- evt$type
-  if (type != "game_start") state$cap_hit_last_play <- FALSE
+  if (type != "game_start") { state$cap_hit_last_play <- FALSE; state$cap_hit_bulk <- FALSE }
   if (type == "game_start") {
     p <- evt$payload
     state <- initial_game_state(p$ruleset %||% state$ruleset)
@@ -174,6 +188,7 @@ apply_event <- function(state, evt) {
     state$runs_this_half <- state$runs_this_half + cr$runs
     state <- advance_half(state)
     state$cap_hit_last_play <- cr$cap_hit   # set AFTER advance_half so the notice survives
+    state$cap_hit_bulk <- cr$cap_hit        # ... and mark it as a bulk entry, not a play
     return(.refresh_flags(state))
   }
   if (type == "lineup_set") {
