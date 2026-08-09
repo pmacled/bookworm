@@ -697,6 +697,15 @@ git commit -m "test: run-cap semantics including the grand-slam-at-the-cap case"
 
 ### Task 4: Mercy schedule
 
+> **Partially superseded — historical record.** This task shipped as written, but the
+> final whole-branch review found the formula below is off by one: `state$inning >= after`
+> is true in the *top* of inning N, i.e. after only N−1 completed innings, and it evaluates
+> mid-half. Harmless until this slice shipped `.USA_MERCY` in two presets. The owner ruled
+> the fix: mercy is evaluated only at a **half-inning boundary**, with `after_inning`
+> meaning *completed* innings, and `state$status` is **derived** rather than latched so an
+> Undo can reopen a finaled game. The corrected rule lives in the spec's "Slice 2.1" mercy
+> section; the snippet below is what was originally written, not what ships.
+
 **Files:**
 - Modify: `R/rules_engine.R` (`game_should_end`)
 - Test: `tests/test_rules_eval.R` (extend)
