@@ -13,6 +13,8 @@
 - Spec: `docs/superpowers/specs/2026-08-08-bookworm-slice-two-design.md`, section "Slice 2.2".
 - **Depends on slice 2.1 being merged.** `evaluate_home_run_limit()`, `evaluate_pinch_runner()`, `state$pinch_runner_log`, and the nested ruleset schema must exist. Depends on slice 2.0 for `APP_CONFIG$outcome_meta`.
 - **`outcome_button()` does not exist.** An earlier draft of this plan depended on it. Slice 2.0's final review found `bslib::popover()` fires on the same tap that records a play, and the owner ruled the per-button popovers out; the function was deleted. Outcome buttons are plain `actionButton(ns(paste0("o_", code)), code, class = "btn-outline-primary bw-outcome-btn")`. Do not reintroduce a popover on them.
+- **All five rule evaluators return the same item shape.** Slice 2.1's final review unified them: `evaluate_fielding`, `evaluate_home_run_limit`, `evaluate_pinch_runner`, and `validate_lineup` all yield `list(severity =, code =, message =)` items, and the two that also report success keep an `ok` field. `evaluate_pinch_runner` returns `list(ok =, items =)` — **not** `errors`. The `code` field is what lets these messages use the existing toast dedupe from commit `7efcf48`; prefer surfacing them through that machinery rather than hand-rolling strings.
+- **Mercy now evaluates only at a half-inning boundary,** with `after_inning` meaning *completed* innings, and `state$status` is **derived** rather than latched — an Undo can reopen a game that had gone final. Do not reintroduce a latch when wiring Undo in this slice.
 - Run every command from the **project root**. Rscript: `"/c/Program Files/R/R-4.5.3/bin/Rscript.exe"`.
 - `Rscript run_tests.R` must exit 0 at the end of **every task**.
 - Events written by slice 1.1 must still fold. `apply_plate_appearance()`'s `reached` fallback stays as a compatibility path.
@@ -1093,7 +1095,11 @@ build_substitution_event <- function(input, state, kind) {
     make_player(out_id, out_id, "M", NA_integer_, NA_integer_, NA_character_)
 
   v <- evaluate_pinch_runner(state$ruleset, state, out_player, incoming)
-  if (!v$ok) return(list(errors = v$errors))
+  # evaluate_pinch_runner returns list(ok =, items = list(list(severity=, code=, message=))).
+  # Slice 2.1's final review unified all five rule evaluators on that item shape so their
+  # messages can use the code-based toast dedupe from commit 7efcf48. An earlier draft of
+  # this plan read `v$errors`, which no longer exists.
+  if (!v$ok) return(list(errors = vapply(v$items, function(i) i$message, character(1))))
 
   new_event("substitution", list(team = state$batting_team, kind = "courtesy_runner",
     out_player_id = out_id, in_player = incoming))
