@@ -22,14 +22,57 @@ box score (`R/boxscore.R`), and stats are derived views. Storage
 - Row-Level Security is defined but not enforced (app-level owner scoping).
 - Fielding gender tiers are configurable via presets + base knobs; full per-tier
   hand-editing in the UI is deferred (the engine supports arbitrary tiers).
+- The mercy schedule is three fixed rows in the UI; the engine accepts any number
+  of tiers, and add/remove rows are deferred.
+- Pinch-/courtesy-runner allowances are configurable and validated by the engine,
+  but nothing in the tracking UI records a runner substitution yet (slice 2.2).
+- The home-run limit is enforced by the engine; wiring it into play entry is
+  slice 2.2.
 - Sign-in requires Supabase configuration; without it the app runs guest-only and says so.
 
 ## Rules supported
-Arbitrary starting count; foul-with-2-strikes (out / one courtesy foul / unlimited);
-batting gender order (none / no-two-males / every-other / one-F-every-N); number of
-batters (unlimited / 9 / 10); innings, per-inning run cap, mercy; coed fielding
-gender balance (min females, max males, per-category minimums, P/C opposite, and
-count-specific tiers). A team with an empty lineup is tracked by runs per inning.
+
+Setup is **rules first, then teams**. A preset picker at the top of the New game
+screen fills in every rule control below it; editing any control relabels the
+saved ruleset `custom`. Built-in presets: Anything Goes (the genderless default),
+Standard Baseball, Standard Slowpitch Softball, Standard Fastpitch Softball,
+GameOn Summer and GameOn Spring.
+
+Each team gets a lineup table (order, name, gender, jersey, position). **Save
+lineup** validates it against the current ruleset and reports inline: batting-size
+mismatch, duplicate jerseys, duplicate names, batting-order gender breaks
+(including where the order wraps from the last slot back to the first), fielder
+count, and fielding gender balance. Nothing blocks the scorer — a knowingly
+illegal lineup is still allowed. For a ruleset that never mentions gender, the
+Gender column disappears entirely. A team with an empty lineup is tracked by runs
+per inning.
+
+Configurable rules:
+
+- **Count and fouls** — arbitrary starting count; foul with two strikes is an out /
+  one courtesy foul / unlimited.
+- **Batting order** — number of batters (unlimited / 9 / 10); gender order as none,
+  max N males in a row, max N of either gender in a row, or at least one F every N.
+- **Innings and run cap** — a per-inning run cap, with `open_last_inning` (no cap in
+  the final inning), `same_play_runs_count` (a play in progress finishes in full, so a
+  grand slam past the cap still counts for four), and `cap_ends_half` (reaching the
+  cap ends the half-inning, which is what a run cap means in practice).
+- **Mercy** — any number of `{after_inning, differential}` tiers; the game ends as
+  soon as one is satisfied. `after_inning` counts *completed* innings and is checked
+  only at the end of a half-inning. Game status is derived from state, so an Undo or
+  a differential that shrinks again reopens the game.
+- **Home runs** — an over-the-fence limit, optional per-gender overrides, what a home
+  run past the limit becomes (out / ground-rule double / single), and whether
+  inside-the-park home runs count toward the limit.
+- **Pinch / courtesy runners** — max per inning, per game and per player; who may
+  run (anyone / same gender / the last out / the last same-gender out) and who may
+  be run for (anyone / pitcher or catcher only).
+- **Coed fielding** — min females, max males, per-category minimums (outfield /
+  infield), pitcher and catcher opposite genders, and count-specific tiers that
+  relax the requirements as more women take the field.
+
+Rulesets from before this slice are migrated on load, so older saved games keep
+working.
 
 ## AI roadmap
 

@@ -10,7 +10,8 @@ initial_game_state <- function(ruleset = default_ruleset_config()) {
     batting_index = list(home = 0L, away = 0L),
     batting_team = "away", current_batter = NULL,
     pa_log = list(), line_score = list(home = integer(), away = integer()),
-    warnings = list(), ruleset = ruleset
+    warnings = list(), ruleset = ruleset, cap_hit_last_play = FALSE,
+    cap_hit_bulk = FALSE, pinch_runner_log = list()
   )
 }
 
@@ -25,6 +26,7 @@ reset_count <- function(state) {
   lineup <- state$lineups[[team]]
   if (length(lineup) == 0) { state$current_batter <- NULL; return(state) }
   batters <- Filter(function(p) !is.na(p$order_slot), lineup)
+  if (length(batters) == 0) { state$current_batter <- NULL; return(state) }
   batters <- batters[order(vapply(batters, function(p) p$order_slot, integer(1)))]
   idx <- (state$batting_index[[team]] %% length(batters))
   state$current_batter <- batters[[idx + 1]]
@@ -48,6 +50,38 @@ advance_half <- function(state) {
   state
 }
 
+# Replays the batting-order gender rule over plate appearances already recorded for
+# `team`, using the lineup that is now known. Returns a single violation naming the
+# earliest offending batter, or NULL. This is what surfaces a rule break that could not
+# be evaluated while the lineup was empty. Only called from the lineup_set branch of
+# apply_event() -- this is specifically the "warn once the batter is registered" case,
+# not a general substitute for the live due-up check in .refresh_flags().
+.retro_batting_gender_violation <- function(state, team) {
+  cfg <- state$ruleset
+  if (identical(cfg$batting_gender_rule$type, "none")) return(NULL)
+  recs <- Filter(function(r) identical(r$team, team), state$pa_log %||% list())
+  if (length(recs) < 2L) return(NULL)
+  gender_of <- function(id) {
+    hit <- Filter(function(p) identical(p$player_id, id), state$lineups[[team]])
+    if (length(hit)) hit[[1]]$gender else NA_character_
+  }
+  seen <- character()
+  for (r in recs) {
+    g <- gender_of(r$batter_id)
+    if (is.na(g)) next
+    if (!next_batter_gender_ok(cfg, seen, g)) {
+      nm <- Filter(function(p) identical(p$player_id, r$batter_id), state$lineups[[team]])
+      nm <- if (length(nm)) nm[[1]]$name else r$batter_id
+      return(list(severity = "violation", code = "batting_gender_retro",
+        message = sprintf(
+          "Batting order: %s batted out of order under this ruleset (inning %d).",
+          nm, r$inning)))
+    }
+    seen <- c(seen, g)
+  }
+  NULL
+}
+
 .refresh_flags <- function(state) {
   cfg <- state$ruleset
   def_team <- if (identical(state$batting_team, "away")) "home" else "away"
@@ -68,11 +102,19 @@ advance_half <- function(state) {
     }
   }
 
-  cap <- cfg$run_cap_per_inning
-  if (!is.na(cap) && !(isTRUE(cfg$open_last_inning) && state$inning >= cfg$innings) &&
-      state$runs_this_half >= cap) {
+  if (isTRUE(state$cap_hit_last_play)) {
+    # The second sentence has to match what actually happened. Under
+    # same_play_runs_count = FALSE a grand slam really is clamped (4 -> 3 against a
+    # cap of 3), so the "same at-bat" wording would state the opposite; and a bulk
+    # half-inning entry has no at-bats at all and is always clamped, so no caveat
+    # applies. Only the first case is the one the owner's wording describes.
+    detail <- if (isTRUE(state$cap_hit_bulk)) ""
+      else if (isTRUE(cfg$run_cap$same_play_runs_count))
+        " Runs beyond the cap only count if they happen in the same at-bat that reaches it."
+      else " Runs beyond the cap did not count."
     w <- c(w, list(list(severity = "notice", code = "run_cap",
-      message = sprintf("Run cap of %d reached this inning.", cap))))
+      message = sprintf("Run cap of %d reached this inning.%s",
+                        cfg$run_cap$per_inning, detail))))
   }
 
   bs <- cfg$batting_size
@@ -84,10 +126,25 @@ advance_half <- function(state) {
     }
   }
 
-  if (game_should_end(cfg, state)) {
-    state$status <- "final"
-    w <- c(w, list(list(severity = "notice", code = "final", message = "Game is final.")))
+  fc <- cfg$fielding$fielder_count
+  if (!is.na(fc)) {
+    n_field <- length(Filter(function(p) !is.na(.position_category(p$position)),
+                             state$lineups[[def_team]]))
+    if (n_field > 0L && n_field != fc)
+      w <- c(w, list(list(severity = "notice", code = "fielder_count",
+        message = sprintf("%d fielders have positions; rule expects %d.", n_field, fc))))
   }
+
+  # DERIVED, not latched. Latching made "final" a one-way trap: tracking_module
+  # refuses every input once final and nothing ever set it back, so an Undo or a
+  # differential that shrinks again could not reopen the game. Because the load
+  # path is fold_events(), recomputing here is exactly as cheap and always agrees
+  # with the current state. Regulation completion (inning > innings) never reverts
+  # on its own, so it simply stays true.
+  is_final <- game_should_end(cfg, state)
+  state$status <- if (is_final) "final" else "in_progress"
+  if (is_final)
+    w <- c(w, list(list(severity = "notice", code = "final", message = "Game is final.")))
 
   state$warnings <- w
   state
@@ -95,6 +152,7 @@ advance_half <- function(state) {
 
 apply_event <- function(state, evt) {
   type <- evt$type
+  if (type != "game_start") { state$cap_hit_last_play <- FALSE; state$cap_hit_bulk <- FALSE }
   if (type == "game_start") {
     p <- evt$payload
     state <- initial_game_state(p$ruleset %||% state$ruleset)
@@ -103,7 +161,7 @@ apply_event <- function(state, evt) {
     state$teams <- list(home = p$home[c("team_id","name")], away = p$away[c("team_id","name")])
     state$batting_team <- p$first_bat %||% "away"
     state <- .set_current_batter(state)
-    return(state)
+    return(.refresh_flags(state))
   }
   if (type == "count_override") {
     state$count <- list(balls = as.integer(evt$payload$balls),
@@ -119,24 +177,36 @@ apply_event <- function(state, evt) {
   if (type == "half_runs") {
     team <- state$batting_team
     runs <- as.integer(evt$payload$runs %||% 0L)
-    capped <- apply_run_cap(state$ruleset, state$runs_this_half + runs, state$inning) - state$runs_this_half
-    runs <- max(0L, capped)
-    state$score[[team]] <- state$score[[team]] + runs
-    state$runs_this_half <- state$runs_this_half + runs
-    # advance_half resets runs_this_half, so .refresh_flags can't see the cap was
-    # hit this half. Evaluate the run-cap notice here (same condition .refresh_flags
-    # uses) and re-append it after the refresh so run-only halves surface the toast.
-    cfg <- state$ruleset
-    cap <- cfg$run_cap_per_inning
-    cap_hit <- !is.na(cap) &&
-      !(isTRUE(cfg$open_last_inning) && state$inning >= cfg$innings) &&
-      state$runs_this_half >= cap
-    state <- .refresh_flags(advance_half(state))
-    if (cap_hit) {
-      state$warnings <- c(state$warnings, list(list(
-        severity = "notice", code = "run_cap",
-        message = sprintf("Run cap of %d reached this inning.", cap))))
-    }
+    # A half_runs entry is a bulk total for the whole half, not a single play in
+    # progress, so same_play_runs_count (which exists to let one play finish in
+    # full, e.g. a grand slam) must not apply: a bulk entry is always clamped
+    # at the cap, regardless of the ruleset's same_play_runs_count setting.
+    cap_cfg <- state$ruleset
+    cap_cfg$run_cap$same_play_runs_count <- FALSE
+    cr <- apply_run_cap(cap_cfg, state$runs_this_half, runs, state$inning)
+    state$score[[team]] <- state$score[[team]] + cr$runs
+    state$runs_this_half <- state$runs_this_half + cr$runs
+    state <- advance_half(state)
+    state$cap_hit_last_play <- cr$cap_hit   # set AFTER advance_half so the notice survives
+    state$cap_hit_bulk <- cr$cap_hit        # ... and mark it as a bulk entry, not a play
+    return(.refresh_flags(state))
+  }
+  if (type == "lineup_set") {
+    team <- evt$payload$team
+    state$lineups[[team]] <- evt$payload$lineup %||% list()
+    n <- length(Filter(function(p) !is.na(p$order_slot), state$lineups[[team]]))
+    if (n > 0L) state$batting_index[[team]] <- state$batting_index[[team]] %% n
+    else state$batting_index[[team]] <- 0L
+    # current_batter is a single slot scoped to whichever team is currently batting.
+    # lineup_set can arrive for either team -- e.g. entering a defensive team's
+    # lineup while the run-only team bats -- so only recompute current_batter when
+    # `team` is the one actually up; otherwise leave the batting team's own slot
+    # alone. (.set_current_batter() always derives from state$batting_team, so this
+    # guard is also a safety net if that ever changes to take a team argument again.)
+    if (identical(team, state$batting_team)) state <- .set_current_batter(state)
+    state <- .refresh_flags(state)
+    retro <- .retro_batting_gender_violation(state, team)
+    if (!is.null(retro)) state$warnings <- c(state$warnings, list(retro))
     return(state)
   }
   if (type == "substitution") return(.refresh_flags(apply_substitution(state, evt)))  # Task 7
@@ -188,8 +258,9 @@ apply_plate_appearance <- function(state, evt) {
   }
 
   state$bases <- bases
-  capped <- apply_run_cap(state$ruleset, state$runs_this_half + runs, state$inning) - state$runs_this_half
-  runs <- max(0L, capped)
+  cr <- apply_run_cap(state$ruleset, state$runs_this_half, runs, state$inning)
+  runs <- cr$runs
+  state$cap_hit_last_play <- cr$cap_hit
   state$score[[team]] <- state$score[[team]] + runs
   state$runs_this_half <- state$runs_this_half + runs
   state$outs <- state$outs + as.integer(p$outs_on_play %||% 0L)
@@ -204,7 +275,9 @@ apply_plate_appearance <- function(state, evt) {
 
   state$batting_index[[team]] <- state$batting_index[[team]] + 1L
   state <- reset_count(state)
-  if (state$outs >= 3L) state <- advance_half(state) else state <- .set_current_batter(state)
+  cap_ends <- isTRUE(cr$cap_hit) && isTRUE(state$ruleset$run_cap$cap_ends_half)
+  if (state$outs >= 3L || cap_ends) state <- advance_half(state)
+  else state <- .set_current_batter(state)
   state
 }
 
@@ -215,7 +288,7 @@ suggest_advances <- function(state, outcome) {
   push <- function(id, from, to, scored = FALSE)
     adv[[length(adv) + 1]] <<- make_advance(id, from, to, scored = scored)
 
-  bump <- switch(outcome, "1B" = 1L, "2B" = 2L, "3B" = 3L, "HR" = 4L,
+  bump <- switch(outcome, "1B" = 1L, "2B" = 2L, "3B" = 3L, "HR" = 4L, "ITPHR" = 4L,
                  "BB" = 1L, "IBB" = 1L, "HBP" = 1L, 0L)
   if (bump == 0L) return(adv)  # outs: no automatic advance suggestion
 
@@ -265,6 +338,9 @@ apply_substitution <- function(state, evt) {
     for (b in c("first","second","third"))
       if (!is.na(state$bases[[b]]) && state$bases[[b]] == p$out_player_id)
         state$bases[[b]] <- p$in_player$player_id
+    state$pinch_runner_log <- c(state$pinch_runner_log %||% list(), list(list(
+      inning = state$inning, half = state$half, team = p$team %||% state$batting_team,
+      out_player_id = p$out_player_id, in_player_id = p$in_player$player_id)))
   }
   state
 }
