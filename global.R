@@ -7,6 +7,7 @@ library(DBI)
 library(httr2)
 library(uuid)
 library(brand.yml)
+library(openssl)
 
 # Source R/ with brand_colors.R and app_config.R first (vasper pattern).
 .r_files <- list.files("R", pattern = "\\.R$", full.names = TRUE)

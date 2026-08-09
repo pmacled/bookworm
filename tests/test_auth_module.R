@@ -58,6 +58,59 @@ test_that("continue as guest yields guest identity", {
   })
 })
 
+test_that("a valid stored token auto-signs the user in", {
+  ok_validate <- function(user_id, username, token) {
+    list(ok = TRUE, user_id = user_id, is_admin = FALSE)
+  }
+  testServer(
+    auth_server,
+    args = list(validate_token = ok_validate, purge_tokens = function() TRUE),
+    {
+      session$setInputs(
+        storedUser = jsonlite::toJSON(
+          list(user_id = "u5", username = "mike", token = "tok"),
+          auto_unbox = TRUE
+        )
+      )
+      expect_equal(identity()$mode, "user")
+      expect_equal(identity()$user_id, "u5")
+    }
+  )
+})
+
+test_that("an invalid stored token does not sign the user in", {
+  bad_validate <- function(user_id, username, token) list(ok = FALSE)
+  testServer(
+    auth_server,
+    args = list(validate_token = bad_validate, purge_tokens = function() TRUE),
+    {
+      session$setInputs(
+        storedUser = jsonlite::toJSON(
+          list(user_id = "u5", username = "mike", token = "tok"),
+          auto_unbox = TRUE
+        )
+      )
+      expect_true(is.na(identity()$mode))
+    }
+  )
+})
+
+test_that("sign out returns identity to an unauthenticated state", {
+  fake_ok <- function(username, password) {
+    list(ok = TRUE, user_id = "u1", is_admin = FALSE, error = NA)
+  }
+  testServer(
+    auth_server,
+    args = list(sign_in = fake_ok, revoke_token = function(t) TRUE),
+    {
+      session$setInputs(username = "mike", password = "pw", do_sign_in = 1)
+      expect_equal(identity()$mode, "user")
+      session$setInputs(sign_out = 1)
+      expect_true(is.na(identity()$mode))
+    }
+  )
+})
+
 test_that("a sign-in function that throws surfaces a message instead of crashing", {
   boom <- function(username, password) stop("connection refused")
   testServer(auth_server, args = list(sign_in = boom, sign_up = boom), {

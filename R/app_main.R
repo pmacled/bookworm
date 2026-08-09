@@ -36,7 +36,8 @@ bookworm_ui <- function() {
         name = "apple-mobile-web-app-status-bar-style",
         content = "default"
       ),
-      tags$link(rel = "stylesheet", href = "css/app.css")
+      tags$link(rel = "stylesheet", href = "css/app.css"),
+      tags$script(src = "js/persistent-login.js")
     ),
     uiOutput("guest_banner"),
     navset_hidden(
@@ -72,15 +73,44 @@ bookworm_server <- function(input, output, session) {
 
   output$guest_banner <- renderUI({
     req(!is.null(identity()))
+    id <- identity()
+    sign_out_btn <- actionButton(
+      # Wired into the auth module's namespace so it triggers auth_server's
+      # input$sign_out (which revokes the token and clears localStorage).
+      NS("auth")("sign_out"),
+      "Sign out",
+      class = "btn-sm btn-outline-secondary ms-auto"
+    )
     if (!is.null(degraded())) {
       div(class = "alert alert-danger m-2 py-2 small", degraded())
-    } else if (identical(identity()$mode, "guest")) {
+    } else if (identical(id$mode, "guest")) {
       div(
         class = "alert alert-warning m-2 py-2 small",
         "Guest mode: sign in to save. Refreshing will lose this game."
       )
+    } else if (identical(id$mode, "user")) {
+      div(
+        class = "d-flex align-items-center gap-2 m-2 py-1 px-2 small text-muted",
+        tags$span(
+          "Signed in",
+          if (!is.null(id$username)) paste0(" as ", id$username) else ""
+        ),
+        sign_out_btn
+      )
     }
   })
+
+  # Sign-out flips identity mode back to NA; return to the auth screen.
+  observeEvent(
+    identity()$mode,
+    {
+      if (is.na(identity()$mode)) {
+        store(NULL)
+        nav_select("screen", "auth")
+      }
+    },
+    ignoreInit = TRUE
+  )
 
   observeEvent(
     game_start(),

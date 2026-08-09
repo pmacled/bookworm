@@ -2121,19 +2121,19 @@
       "checksum": "1b7f61dffa057ca431baac7853b24aae"
     },
     "data-raw/supabase_schema.sql": {
-      "checksum": "08f3c9066da5994d8d1bdf3679a49891"
+      "checksum": "8e0360ac446dbeb914813bcf7e22cda8"
     },
     "global.R": {
-      "checksum": "32c0477790405ab42f7b53069b1793bd"
+      "checksum": "7c8b1530d12f54c7f11d566dadd1af2a"
     },
     "R/app_config.R": {
-      "checksum": "9271fe58c4485bad8b4e94ed44d3eec0"
+      "checksum": "0c775f5dd1f547f619f87d8dfdd4e05d"
     },
     "R/app_main.R": {
-      "checksum": "4235fbf2c60450b708d5ea74891122a8"
+      "checksum": "304fad4b1695bb846945bb0ff9ea4105"
     },
     "R/auth_module.R": {
-      "checksum": "c95c1cdc628a3133f3ac6a96974da591"
+      "checksum": "79deb89f447858136c1df37c1148a349"
     },
     "R/boxscore.R": {
       "checksum": "46cd52fc5391fdb28ac1ccbfd45c854f"
@@ -2151,7 +2151,7 @@
       "checksum": "2e9841da85ddc737df329abe67e0fdde"
     },
     "R/game_reducer.R": {
-      "checksum": "5a9290cc84262f2360c2d64d29bf7000"
+      "checksum": "60cccbe14cd87c67e83b78d760f050db"
     },
     "R/json_io.R": {
       "checksum": "1ff8bfb33d52725f9d70ee00e44a14b2"
@@ -2196,13 +2196,13 @@
       "checksum": "ed01421708f0188f247f74730fca4ed1"
     },
     "R/substitution_ui.R": {
-      "checksum": "b5a285451b41e8451e8e86d11aa624af"
+      "checksum": "6fd08b62dd66a00f1e5bc604ddd1acc6"
     },
     "R/supabase_client.R": {
-      "checksum": "241c1e6504604c95818ec5b190bddf80"
+      "checksum": "db51bf5f3cbce80be77aad2f08d34c6a"
     },
     "R/tracking_module.R": {
-      "checksum": "0f1c66ba23be2b39cc2e89118e2c10dd"
+      "checksum": "50819197cd887f398c3968416248b872"
     },
     "README.md": {
       "checksum": "e25768f4c898c8ada43077e14fe5657c"
@@ -2236,6 +2236,9 @@
     },
     "www/js/.gitkeep": {
       "checksum": "d41d8cd98f00b204e9800998ecf8427e"
+    },
+    "www/js/persistent-login.js": {
+      "checksum": "e8096e26fdb28c994c841971063c63df"
     },
     "www/manifest.webmanifest": {
       "checksum": "743e4b3f2a91a01c169db789cfa627c5"

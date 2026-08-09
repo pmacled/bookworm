@@ -118,3 +118,58 @@ test_that("a defensive substitution keeps the batting order slot", {
   expect_equal(p$position, "LF")
   expect_equal(p$order_slot, 3L)
 })
+
+test_that("a full substitution inherits the outgoing slot and given position", {
+  st <- initial_game_state()
+  st$lineups$away <- list(make_player("a1", "A1", "M", 1L, 4L, "SS"))
+  evt <- new_event(
+    "substitution",
+    list(
+      team = "away",
+      kind = "full",
+      out_player_id = "a1",
+      position = "CF",
+      in_player = make_player("a9", "Sub", "F", 22L, NA_integer_, NA_character_)
+    )
+  )
+  s <- apply_substitution(st, evt)
+  p <- s$lineups$away[[1]]
+  expect_equal(p$player_id, "a9")
+  expect_equal(p$order_slot, 4L)
+  expect_equal(p$position, "CF")
+})
+
+test_that("a full substitution falls back to the outgoing player's position", {
+  st <- initial_game_state()
+  st$lineups$away <- list(make_player("a1", "A1", "M", 1L, 4L, "SS"))
+  evt <- new_event(
+    "substitution",
+    list(
+      team = "away",
+      kind = "full",
+      out_player_id = "a1",
+      position = NA_character_,
+      in_player = make_player("a9", "Sub", "F", 22L, NA_integer_, NA_character_)
+    )
+  )
+  s <- apply_substitution(st, evt)
+  expect_equal(s$lineups$away[[1]]$position, "SS")
+})
+
+test_that("a full substitution of an on-base runner swaps the runner too", {
+  st <- initial_game_state()
+  st$lineups$away <- list(make_player("a1", "A1", "M", 1L, 4L, "SS"))
+  st$bases$second <- "a1"
+  evt <- new_event(
+    "substitution",
+    list(
+      team = "away",
+      kind = "full",
+      out_player_id = "a1",
+      position = "CF",
+      in_player = make_player("a9", "Sub", "F", 22L, NA_integer_, NA_character_)
+    )
+  )
+  s <- apply_substitution(st, evt)
+  expect_equal(s$bases$second, "a9")
+})

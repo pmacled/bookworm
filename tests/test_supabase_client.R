@@ -1,5 +1,6 @@
 library(testthat)
 library(DBI)
+suppressMessages(library(openssl))
 source(file.path("R", "app_config.R"))
 source(file.path("R", "supabase_client.R"))
 
@@ -98,4 +99,47 @@ test_that("friendly_auth_error rewrites known messages and passes others through
   # Empty or missing collapses to a generic message.
   expect_true(nzchar(friendly_auth_error("")))
   expect_true(nzchar(friendly_auth_error(NA_character_)))
+})
+
+test_that("db_validate_remember_token accepts a live matching token", {
+  con <- fake_conn(list(
+    data.frame(id = "u-1", is_admin = FALSE) # join row exists, not expired
+  ))
+  res <- db_validate_remember_token(
+    "u-1",
+    "mike",
+    "sometoken",
+    connect = function() con
+  )
+  expect_true(res$ok)
+  expect_equal(res$user_id, "u-1")
+})
+
+test_that("db_validate_remember_token rejects an unknown or expired token (no row)", {
+  con <- fake_conn(list(data.frame(id = character(), is_admin = logical())))
+  res <- db_validate_remember_token(
+    "u-1",
+    "mike",
+    "bad",
+    connect = function() con
+  )
+  expect_false(res$ok)
+  expect_true(is.na(res$user_id))
+})
+
+test_that("db_validate_remember_token rejects an empty token before connecting", {
+  connected <- FALSE
+  res <- db_validate_remember_token("u-1", "mike", "", connect = function() {
+    connected <<- TRUE
+    stop("should not connect")
+  })
+  expect_false(res$ok)
+  expect_false(connected)
+})
+
+test_that("the stored token hash is never the raw token", {
+  expect_false(identical(.token_hash("secret"), "secret"))
+  # sha256 hex is 64 chars and stable.
+  expect_equal(nchar(.token_hash("secret")), 64L)
+  expect_equal(.token_hash("secret"), .token_hash("secret"))
 })

@@ -28,6 +28,22 @@ create table if not exists users (
 );
 
 -- ---------------------------------------------------------------------------
+-- Remember-me tokens (persistent login)
+-- ---------------------------------------------------------------------------
+-- Supports "keep me signed in". The browser stores a random token in
+-- localStorage; the server stores ONLY its sha256 hash here, so a database read
+-- alone cannot be replayed as a login. A token is validated by hashing the
+-- presented value and matching token_hash while not expired.
+create table if not exists auth_tokens (
+  token_hash text primary key,
+  user_id uuid not null references users(id) on delete cascade,
+  expires_at timestamptz not null,
+  created_at timestamptz not null default now(),
+  last_used_at timestamptz
+);
+create index if not exists idx_auth_tokens_user on auth_tokens(user_id);
+
+-- ---------------------------------------------------------------------------
 -- Leagues / rulesets / teams / players
 -- ---------------------------------------------------------------------------
 create table if not exists leagues (

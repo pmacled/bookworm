@@ -587,6 +587,46 @@ apply_substitution <- function(state, evt) {
       }
     }
     state$lineups[[team]] <- lineup
+  } else if (p$kind == "full") {
+    # A full substitution replaces the player everywhere: the incoming player
+    # takes the outgoing player's batting-order slot (order preserved) and a
+    # fielding position (defaulting to the outgoing player's when none is given),
+    # and if the outgoing player is on base the runner is swapped too.
+    lineup <- state$lineups[[team]]
+    for (i in seq_along(lineup)) {
+      if (identical(lineup[[i]]$player_id, p$out_player_id)) {
+        out_slot <- lineup[[i]]$order_slot
+        out_pos <- lineup[[i]]$position
+        new_pos <- if (
+          length(p$position) == 1 && !is.na(p$position) && nzchar(p$position)
+        ) {
+          p$position
+        } else {
+          out_pos
+        }
+        lineup[[i]] <- make_player(
+          inp$player_id,
+          inp$name,
+          inp$gender,
+          jersey_number = inp$jersey_number,
+          order_slot = out_slot,
+          position = new_pos
+        )
+      }
+    }
+    state$lineups[[team]] <- lineup
+    for (b in c("first", "second", "third")) {
+      if (!is.na(state$bases[[b]]) && state$bases[[b]] == p$out_player_id) {
+        state$bases[[b]] <- inp$player_id
+      }
+    }
+    origin <- state$runner_origin %||% list()
+    if (!is.null(origin[[p$out_player_id]])) {
+      origin[[inp$player_id]] <- origin[[p$out_player_id]]
+      origin[[p$out_player_id]] <- NULL
+      state$runner_origin <- origin
+    }
+    state <- .set_current_batter(state)
   } else if (p$kind == "courtesy_runner") {
     for (b in c("first", "second", "third")) {
       if (!is.na(state$bases[[b]]) && state$bases[[b]] == p$out_player_id) {
