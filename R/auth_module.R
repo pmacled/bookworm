@@ -17,26 +17,38 @@ auth_ui <- function(id) {
     },
     div(
       class = "d-flex gap-2 flex-wrap",
-      actionButton(
-        ns("do_sign_in"),
-        "Sign in",
-        class = if (configured) {
-          "btn-primary"
-        } else {
-          "btn-outline-secondary disabled"
-        },
-        disabled = !configured
-      ),
-      actionButton(
-        ns("do_sign_up"),
-        "Create account",
-        class = if (configured) {
-          "btn-outline-secondary"
-        } else {
-          "btn-outline-secondary disabled"
-        },
-        disabled = !configured
-      ),
+      if (configured) {
+        # Task buttons show a spinner and disable themselves while the sign-in /
+        # sign-up DB query runs, then auto-reset when the flush completes.
+        input_task_button(
+          ns("do_sign_in"),
+          "Sign in",
+          label_busy = "Signing in\u2026",
+          class = "btn-primary"
+        )
+      } else {
+        actionButton(
+          ns("do_sign_in"),
+          "Sign in",
+          class = "btn-outline-secondary disabled",
+          disabled = TRUE
+        )
+      },
+      if (configured) {
+        input_task_button(
+          ns("do_sign_up"),
+          "Create account",
+          label_busy = "Creating\u2026",
+          class = "btn-outline-secondary"
+        )
+      } else {
+        actionButton(
+          ns("do_sign_up"),
+          "Create account",
+          class = "btn-outline-secondary disabled",
+          disabled = TRUE
+        )
+      },
       actionButton(
         ns("do_guest"),
         "Continue as guest",
