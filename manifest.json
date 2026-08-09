@@ -2105,12 +2105,6 @@
     }
   },
   "files": {
-    ".Renviron": {
-      "checksum": "3986df476c1c21a69d4d206b499ba882"
-    },
-    ".Renviron.template": {
-      "checksum": "656f6dee3ca824ed7ff67a6f3ac0729f"
-    },
     "_brand.yml": {
       "checksum": "2b59df6a610d5bc9b2a73fd1e4a28897"
     },
@@ -2133,7 +2127,7 @@
       "checksum": "304fad4b1695bb846945bb0ff9ea4105"
     },
     "R/auth_module.R": {
-      "checksum": "79deb89f447858136c1df37c1148a349"
+      "checksum": "b5d188d7c0dbb30dcf99dd312f8229e6"
     },
     "R/boxscore.R": {
       "checksum": "46cd52fc5391fdb28ac1ccbfd45c854f"
@@ -2238,7 +2232,7 @@
       "checksum": "d41d8cd98f00b204e9800998ecf8427e"
     },
     "www/js/persistent-login.js": {
-      "checksum": "e8096e26fdb28c994c841971063c63df"
+      "checksum": "9686137418dfd33025d659c83c943a6f"
     },
     "www/manifest.webmanifest": {
       "checksum": "743e4b3f2a91a01c169db789cfa627c5"
