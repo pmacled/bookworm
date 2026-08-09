@@ -94,13 +94,6 @@ test_that("ruleset_is_genderless separates the genderless presets from GameOn", 
     expect_false(ruleset_is_genderless(preset_ruleset(id)), info = id)
 })
 
-test_that("a genderless ruleset stops being genderless when a gender rule is added", {
-  cfg <- preset_ruleset("anything_goes")
-  expect_true(ruleset_is_genderless(cfg))
-  cfg$fielding$min_females <- 2L
-  expect_false(ruleset_is_genderless(cfg))
-})
-
 test_that("ruleset_is_genderless flips on each gender-referencing field independently", {
   # Each sub-test starts from a fresh, genderless baseline and changes exactly one
   # field, so a predicate missing that field's check cannot be masked by any other

@@ -51,29 +51,14 @@ test_that("current_batter is untouched when lineup_set targets the team not at b
   expect_equal(s$batting_team, "away")
 })
 
-test_that("a late lineup triggers a retroactive batting-order violation", {
-  cfg <- coerce_ruleset_config(list(
-    batting_gender_rule = list(type = "max_consecutive_males", n = 1L)))
-  # Two male plate appearances are recorded while away's lineup is still empty --
-  # genders unknown -- and the lineup naming them both male arrives only after.
-  pa <- function(id, seq) new_event("plate_appearance", list(team = "away",
-    batter_id = id, outcome = "1B", reached = 1L, rbi = 0L, outs_on_play = 0L,
-    advances = list(make_advance(id, 0L, 1L))), seq = seq)
-  s <- fold_events(list(
-    start_runonly(cfg),
-    pa("a1", 2L), pa("a2", 3L),
-    new_event("lineup_set", list(team = "away", lineup = mk("a", c("M","M","F"))), seq = 4L)))
-  codes <- vapply(s$warnings, function(w) w$code, character(1))
-  expect_true("batting_gender_retro" %in% codes)
-})
-
 test_that("lineup_set re-evaluates already-recorded plate appearances", {
   cfg <- coerce_ruleset_config(list(
     batting_gender_rule = list(type = "max_consecutive_males", n = 1L)))
   pa <- function(id, seq) new_event("plate_appearance", list(team = "away",
     batter_id = id, outcome = "1B", reached = 1L, rbi = 0L, outs_on_play = 0L,
     advances = list(make_advance(id, 0L, 1L))), seq = seq)
-  # Batters recorded first; the lineup naming them both male arrives afterwards.
+  # Two male plate appearances are recorded while away's lineup is still empty --
+  # genders unknown -- and the lineup naming them both male arrives only after.
   s <- fold_events(list(
     start_runonly(cfg),
     pa("a1", 2L), pa("a2", 3L),
