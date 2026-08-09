@@ -351,17 +351,9 @@ next_batter_gender_ok <- function(cfg, prev_genders, next_gender) {
   TRUE
 }
 
-STANDARD_COED_FIELDING <- list(
-  min_females = 4L,
-  max_males = 6L,
-  tiers = list(
-    list(females = 3L, outfield = 1L, infield = 1L, battery = "one"),
-    list(females = 4L, outfield = 1L, infield = 1L, battery = "one"),
-    list(females = 5L, outfield = 2L, infield = 2L, battery = "one"),
-    list(females = 6L, outfield = 1L, infield = 1L, battery = "any")
-  ),
-  position_requirements = list()
-)
+# STANDARD_COED_FIELDING is defined in app_config.R, which loads first under
+# both global.R's ordering and Shiny's alphabetical R/ auto-loading. It is
+# referenced by rule_presets.R at load time, so it must not live here.
 
 .position_category <- function(pos) {
   if (is.null(pos) || length(pos) != 1 || is.na(pos)) {

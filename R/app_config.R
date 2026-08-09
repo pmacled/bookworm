@@ -146,3 +146,18 @@ DB_TABLES <- list(
   game_events = "game_events",
   plate_appearances = "plate_appearances"
 )
+
+# Standard coed fielding requirements. Lives here (loaded first) rather than in
+# rules_engine.R because rule_presets.R references it at load time, and Shiny's
+# alphabetical R/ auto-loading sources rule_presets.R before rules_engine.R.
+STANDARD_COED_FIELDING <- list(
+  min_females = 4L,
+  max_males = 6L,
+  tiers = list(
+    list(females = 3L, outfield = 1L, infield = 1L, battery = "one"),
+    list(females = 4L, outfield = 1L, infield = 1L, battery = "one"),
+    list(females = 5L, outfield = 2L, infield = 2L, battery = "one"),
+    list(females = 6L, outfield = 1L, infield = 1L, battery = "any")
+  ),
+  position_requirements = list()
+)
