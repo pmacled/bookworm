@@ -1,3 +1,5 @@
+/* --tap is the minimum touch-target edge. 3rem (48px) clears the 44px
+   floor recommended by both Apple HIG and Material for one-hand tapping. */
 :root { --tap: 3rem; }
 
 /* Lineup editor: a real table whose cells hold Shiny inputs. */
@@ -68,3 +70,45 @@
 
 /* Lineup up/down reorder buttons: compact stacked arrows. */
 .bw-move .bw-move-btn { padding: .05rem .3rem; line-height: 1; font-size: .7rem; }
+
+/* ---------------------------------------------------------------------------
+   Mobile scoring refinements. A scorer holds the phone one-handed at a game,
+   in sunlight, and taps between pitches — so the priorities are: keep the
+   score/count in view, make every control easy to hit, and never let the OS
+   fight the layout (iOS focus-zoom, notch insets, rubber-band scroll).
+   --------------------------------------------------------------------------- */
+
+/* Momentum scrolling for the horizontally-scrolling grids on touch devices. */
+.bw-lineup-wrap, .bw-scorebook { -webkit-overflow-scrolling: touch; }
+
+/* Keep the one-glance situation card pinned while the scorer scrolls the
+   scorebook or box score below it. It is the thing they look at every pitch. */
+.bw-situation {
+  position: sticky;
+  top: 0;
+  z-index: 5;
+  /* Opaque background so scorebook rows never bleed through when pinned. */
+  background: var(--bs-body-bg);
+}
+
+/* Give the secondary actions real touch targets. btn-sm on a phone is a
+   frequent mis-tap; bump the min height without changing their visual weight. */
+.bw-secondary-actions .btn { min-height: 2.5rem; }
+
+/* Prevent iOS Safari from zooming the viewport when a sub-16px input gains
+   focus. Applies only on phones so desktop density is untouched. */
+@media (max-width: 576px) {
+  .form-control, .form-select, input[type="text"], input[type="password"],
+  input[type="number"] { font-size: 16px; }
+}
+
+/* Honor the safe-area insets on notched phones (requires viewport-fit=cover,
+   set in the app's viewport meta tag) so nothing hides under the home bar
+   or rounded corners. */
+@supports (padding: max(0px)) {
+  body {
+    padding-left: env(safe-area-inset-left);
+    padding-right: env(safe-area-inset-right);
+    padding-bottom: env(safe-area-inset-bottom);
+  }
+}

@@ -6,7 +6,38 @@ bookworm_ui <- function() {
     title = APP_CONFIG$app_name,
     theme = app_theme,
     padding = 0,
-    tags$head(tags$link(rel = "stylesheet", href = "css/app.css")),
+    tags$head(
+      # Explicit viewport: bslib injects a responsive one, but we also want
+      # viewport-fit=cover so the safe-area insets in app.css take effect on
+      # notched phones, and we lock scaling for a stable one-hand scoring UI.
+      tags$meta(
+        name = "viewport",
+        content = "width=device-width, initial-scale=1, viewport-fit=cover"
+      ),
+      # Tints the mobile browser chrome. Matches the manifest theme_color so
+      # installed and in-browser chrome agree.
+      tags$meta(
+        name = "theme-color",
+        content = BRAND_COLORS$primary %||% "#28406B"
+      ),
+      # PWA manifest + home-screen icons. iOS ignores the manifest for the
+      # home-screen icon and uses apple-touch-icon instead.
+      tags$link(rel = "manifest", href = "manifest.webmanifest"),
+      tags$link(rel = "apple-touch-icon", href = "icons/apple-touch-icon.png"),
+      tags$link(
+        rel = "icon",
+        type = "image/png",
+        sizes = "32x32",
+        href = "icons/favicon-32.png"
+      ),
+      # Lets iOS treat an added-to-home-screen instance as a standalone app.
+      tags$meta(name = "apple-mobile-web-app-capable", content = "yes"),
+      tags$meta(
+        name = "apple-mobile-web-app-status-bar-style",
+        content = "default"
+      ),
+      tags$link(rel = "stylesheet", href = "css/app.css")
+    ),
     uiOutput("guest_banner"),
     navset_hidden(
       id = "screen",
